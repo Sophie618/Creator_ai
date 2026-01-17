@@ -5,24 +5,13 @@ import {
   ChevronRight,
   ChevronDown,
   Loader2,
-  Zap,
   Layout,
-  Globe,
-  Monitor,
-  Sparkles,
   ArrowRight,
   CheckCircle2,
-  ShieldAlert,
-  ArrowUpRight,
-  Share2,
-  Search,
   Hash,
   Network,
-  Maximize2,
-  MessageSquare,
-  MinusCircle,
-  PlusCircle,
-  RefreshCw
+  RefreshCw,
+  MessageSquare
 } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 
@@ -51,9 +40,15 @@ interface ReaderViewProps {
 
 const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }) => {
   const [viewState, setViewState] = useState<'loading' | 'content' | 'quiz' | 'completed'>('loading');
-  const [readerMode, setReaderMode] = useState<'ai' | 'web'>('ai');
   const [parsingProgress, setParsingProgress] = useState(0);
   
+  // 文章数据
+  const [articleData, setArticleData] = useState<{
+    title: string;
+    content: string;
+    source: string;
+  } | null>(null);
+
   // 分析相关状态
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisData, setAnalysisData] = useState<AnalysisResult | null>(null);
@@ -69,42 +64,64 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
     'text-lime-500', 'text-sky-500', 'text-pink-500'
   ];
 
-  // 模拟文章内容
-  const articleContent = `在大模型时代，Scaling Law（规模法则）已经从一个工程经验上升到了物理定律的高度。AI 正在重构我们对“阅读”的定义。
-
-Scaling Law 的本质并不是工程参数的堆砌，而是将“能源”转化为“逻辑熵”的物理过程。这意味着 AI 的竞争终局可能是能源成本的竞争。
-
-对于个人而言，这意味着我们应该更关注“提问的质量”而非“计算的速度”，因为逻辑序的产出成本正在急剧下降。未来的设计不再是关于像素的排列，而是关于“意图”的捕获与共鸣。界面（UI）将消失，取而代之的是服务（Service）。`;
-
-  // 1. 处理加载进度
+  // 1. 获取文章内容并模拟进度
   useEffect(() => {
-    if (viewState === 'loading') {
-      let current = 0;
-      const interval = setInterval(() => {
-        current += 5;
-        setParsingProgress(prev => Math.min(prev + 5, 100));
-        if (current >= 100) {
-          clearInterval(interval);
+    let progressTimer: NodeJS.Timeout;
+    
+    const fetchArticle = async () => {
+      // 模拟加载进度感
+      progressTimer = setInterval(() => {
+        setParsingProgress(prev => {
+          if (prev >= 95) return prev;
+          return prev + Math.floor(Math.random() * 5);
+        });
+      }, 100);
+
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/api/article/${articleId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setArticleData({
+            title: data.title,
+            content: data.content || "",
+            source: data.source
+          });
+          setParsingProgress(100);
+          // 留一点时间显示 100%
           setTimeout(() => setViewState('content'), 400);
+        } else {
+          setViewState('content'); // 即使失败也进入内容视图展示错误
         }
-      }, 50);
-      return () => clearInterval(interval);
+      } catch (err) {
+        console.error("Failed to fetch article", err);
+        setViewState('content');
+      } finally {
+        clearInterval(progressTimer);
+      }
+    };
+    
+    if (viewState === 'loading') {
+      fetchArticle();
     }
-  }, [viewState]);
 
-  // 2. 自动触发分析：当进入 content 视图时，立即自动执行分析
+    return () => clearInterval(progressTimer);
+  }, [articleId]);
+
+  // 2. 自动触发分析
   useEffect(() => {
-    if (viewState === 'content' && !analysisData && !isAnalyzing) {
-      performAnalysis();
+    if (viewState === 'content' && articleData?.content && !analysisData && !isAnalyzing) {
+      performAnalysis(articleData.content);
     }
-  }, [viewState]);
+  }, [viewState, articleData]);
 
   // 执行 AI 分析逻辑
-  const performAnalysis = async () => {
+  const performAnalysis = async (content: string) => {
     setIsAnalyzing(true);
     try {
       const apiKey = process.env.API_KEY;
-      if (!apiKey) {
+      const textToAnalyze = content || "";
+      
+      if (!apiKey || !textToAnalyze) {
         setAnalysisData({
           mindMap: [
             { title: "Scaling Law 的本质", children: [{ title: "能源到逻辑熵的转化" }, { title: "物理过程而非工程堆砌" }] },
@@ -128,7 +145,7 @@ Scaling Law 的本质并不是工程参数的堆砌，而是将“能源”转�
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `请分析以下文章内容，提取其逻辑结构（思维导图）和核心关键词。
-        文章内容：${articleContent}
+        文章内容：${textToAnalyze.slice(0, 4000)}
         输出格式要求为 JSON，包含 mindMap (树状结构) 和 keywords (包含20个以上关键词，权重 1-10)。`,
         config: {
           responseMimeType: "application/json",
@@ -237,133 +254,90 @@ Scaling Law 的本质并不是工程参数的堆砌，而是将“能源”转�
   );
 
   return (
-    <div className="flex h-screen bg-white text-slate-900 overflow-hidden relative">
+    <div className="flex h-screen bg-[#f8f9fa] text-slate-900 overflow-hidden relative">
       <main className="flex-1 relative z-10 h-full flex flex-col">
         {viewState === 'loading' ? renderLoading() : (
-          <>
-            {/* 顶部导航栏 */}
-            <nav className="h-20 bg-white border-b border-slate-100 px-8 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-6">
-                <button onClick={onBack} className="p-2.5 hover:bg-slate-50 rounded-2xl text-slate-400 hover:text-slate-900 transition-all">
-                  <ChevronLeft size={22} />
-                </button>
-                <div className="flex items-center bg-slate-100/50 p-1.5 rounded-[22px] border border-slate-200/50">
-                  <button 
-                    onClick={() => setReaderMode('ai')}
-                    className={`flex items-center gap-2 px-6 py-2.5 rounded-[18px] text-xs font-black transition-all ${
-                      readerMode === 'ai' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                  >
-                    <Sparkles size={14} fill={readerMode === 'ai' ? "currentColor" : "none"} />
-                    沉浸解构
-                  </button>
-                  <button 
-                    onClick={() => setReaderMode('web')}
-                    className={`flex items-center gap-2 px-6 py-2.5 rounded-[18px] text-xs font-black transition-all ${
-                      readerMode === 'web' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                  >
-                    <Globe size={14} />
-                    原文镜像
-                  </button>
-                </div>
-                {initialUrl && (
-                  <a 
-                    href={initialUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="hidden md:flex items-center gap-2 px-4 py-2.5 rounded-[18px] text-xs font-black transition-all bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50"
-                  >
-                    <Globe size={14} />
-                    在新标签打开原文
-                    <ArrowUpRight size={14} />
-                  </a>
-                )}
-              </div>
+          <div className="flex-1 flex overflow-hidden">
+            {/* 主内容区 - 采用阴影卡片设计 */}
+            <div className="flex-1 overflow-y-auto relative scroll-smooth no-scrollbar p-6 md:p-12 lg:p-16" ref={contentRef}>
+              {/* 悬浮返回按钮 */}
+              <button 
+                onClick={onBack} 
+                className="fixed top-8 left-8 z-50 p-3 bg-white/80 backdrop-blur-md hover:bg-white rounded-2xl text-slate-400 hover:text-slate-900 shadow-sm border border-slate-200 transition-all hover:scale-110 active:scale-95 group"
+              >
+                <ChevronLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
+              </button>
 
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-100">
-                  {isAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                  {isAnalyzing ? "正在自动同步..." : "AI 已完成解构"}
-                </div>
-                <div className="h-8 w-[1px] bg-slate-100 mx-2" />
-                <button className="p-3 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><Share2 size={20} /></button>
-              </div>
-            </nav>
-
-            <div className="flex-1 flex overflow-hidden">
-              {/* 主内容区 */}
-              <div className="flex-1 overflow-y-auto bg-[#fafafa] relative scroll-smooth no-scrollbar" ref={contentRef}>
-                <div className="max-w-4xl mx-auto py-20 px-10 md:px-16">
-                  {readerMode === 'web' ? (
-                    <div className="h-[200vh] w-full bg-white rounded-[40px] shadow-2xl border border-slate-100 flex flex-col items-center justify-center text-center p-20">
-                       <Monitor size={80} className="text-slate-100 mb-8" />
-                       <h3 className="text-2xl font-black text-slate-900 mb-4">网页镜像保护中</h3>
-                       <p className="text-slate-400 font-medium max-w-sm">
-                         AI 已为您生成离线文本快照。由于原文禁止嵌入，此处展示 AI 抓取的高保真解析结果。
-                       </p>
-                    </div>
-                  ) : (
-                    <article className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-                      <div className="space-y-6">
-                        <div className="flex items-center gap-3">
-                          <span className="px-3 py-1 bg-indigo-600 text-white text-[10px] font-black rounded-lg tracking-[0.1em] uppercase">Deep Insights</span>
-                          <span className="text-slate-300 font-bold">/</span>
-                          <span className="text-slate-400 text-[10px] font-black uppercase">Scaling Law & Intelligence</span>
-                        </div>
-                        <h1 className="text-6xl font-black text-slate-900 leading-[1.1] tracking-tight serif">
-                          Scaling Law 与 <br />
-                          <span className="text-indigo-600">智能的物理终局</span>
-                        </h1>
+              <div className="max-w-4xl mx-auto">
+                <article className="bg-white rounded-[48px] shadow-[0_24px_80px_rgba(0,0,0,0.06)] border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                  {/* 文章头图/顶栏装饰 */}
+                  <div className="h-2 bg-indigo-600 w-full" />
+                  
+                  <div className="py-16 px-10 md:px-20 space-y-12">
+                    <div className="space-y-8">
+                      <div className="flex items-center gap-3">
+                        <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-lg tracking-[0.1em] uppercase border border-indigo-100">AI Deep Reading</span>
+                        <span className="text-slate-200">/</span>
+                        <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest">{articleData?.source || 'Original Source'}</span>
                       </div>
-                      
-                      <div className="prose prose-slate prose-xl max-w-none text-slate-700 leading-relaxed font-medium space-y-12 serif">
-                        <p className="text-2xl font-bold text-slate-900 leading-snug border-l-8 border-indigo-600 pl-8 py-2 not-serif">
-                          在大模型时代，Scaling Law（规模法则）已经从一个工程经验上升到了物理定律的高度。AI 正在重构我们对“阅读”的定义。
-                        </p>
-                        {articleContent.split('\n\n').map((p, i) => (
-                          <p key={i} className="first-letter:text-5xl first-letter:font-black first-letter:text-indigo-600 first-letter:mr-3 first-letter:float-left">
+                      <h1 className="text-5xl md:text-6xl font-black text-slate-900 leading-[1.15] tracking-tight serif">
+                        {articleData?.title || '正在解析标题...'}
+                      </h1>
+                    </div>
+                    
+                    <div className="prose prose-slate prose-xl max-w-none text-slate-700 leading-relaxed font-medium space-y-10 serif">
+                      {articleData?.content ? (
+                        articleData.content.split('\n\n').map((p, i) => (
+                          <p key={i} className="first-letter:text-5xl first-letter:font-black first-letter:text-indigo-600 first-letter:mr-3 first-letter:float-left first-letter:mt-2">
                             {p}
                           </p>
-                        ))}
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 border-t border-slate-100">
-                          <div className="md:col-span-2 bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
-                            <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-4">结构化总结</h3>
-                            <ul className="space-y-3 text-[15px] leading-7 text-slate-700">
-                              <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2" /> Scaling Law 从工程经验上升为物理规律</li>
-                              <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2" /> 能源成本是智能竞争的终局维度</li>
-                              <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2" /> 关注高质量提问而非计算速度</li>
-                              <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2" /> 设计从像素转向意图与共鸣</li>
-                            </ul>
-                          </div>
-                          <div className="bg-indigo-50/50 rounded-3xl border border-indigo-100 p-6">
-                            <h3 className="text-sm font-black text-indigo-600 uppercase tracking-widest mb-4">关键信息</h3>
-                            <div className="flex flex-wrap gap-2">
-                              {["Scaling Law","能源","意图","提问质量","服务化"].map((t,i) => (
-                                <span key={i} className="px-3 py-1 rounded-full text-xs font-bold bg-white text-indigo-700 border border-indigo-200">{t}</span>
-                              ))}
-                            </div>
+                        ))
+                      ) : (
+                        <p className="text-slate-400 italic">正在提取正文内容...</p>
+                      )}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-12 border-t border-slate-100 mt-20">
+                        <div className="md:col-span-2 bg-slate-50/50 rounded-3xl border border-slate-100 p-8">
+                          <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">结构化要点提炼</h3>
+                          <ul className="space-y-4 text-[15px] leading-7 text-slate-700 font-bold">
+                            {analysisData?.mindMap.slice(0, 4).map((node, i) => (
+                              <li key={i} className="flex items-start gap-3">
+                                <span className="w-2 h-2 rounded-full bg-indigo-500 mt-2.5 shrink-0 shadow-[0_0_10px_rgba(99,102,241,0.4)]" /> 
+                                {node.title}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="bg-indigo-50/30 rounded-3xl border border-indigo-100/50 p-8">
+                          <h3 className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em] mb-6">核心概念</h3>
+                          <div className="flex flex-wrap gap-2">
+                            {analysisData?.keywords.slice(0, 6).map((kw, i) => (
+                              <span key={i} className="px-3 py-1.5 rounded-xl text-xs font-black bg-white text-indigo-600 border border-indigo-100 shadow-sm">{kw.text}</span>
+                            ))}
                           </div>
                         </div>
                       </div>
+                    </div>
 
-                      <div className="pt-20 border-t border-slate-100 flex flex-col items-center text-center gap-12">
-                         <div className="w-24 h-24 bg-indigo-50 rounded-[32px] flex items-center justify-center text-indigo-600 shadow-inner group cursor-pointer hover:bg-indigo-600 hover:text-white transition-all">
-                            <CheckCircle2 size={40} strokeWidth={1.5} />
-                         </div>
-                         <div className="space-y-2">
-                           <h4 className="text-3xl font-black text-slate-900">阅读达成</h4>
-                           <p className="text-slate-400 font-bold">右侧已同步生成逻辑矩阵，帮助您完成认知闭环。</p>
-                         </div>
-                      </div>
-                    </article>
-                  )}
-                </div>
+                    <div className="pt-24 pb-8 flex flex-col items-center text-center gap-10">
+                       <div className="w-24 h-24 bg-slate-900 rounded-[36px] flex items-center justify-center text-white shadow-2xl shadow-slate-200 group cursor-pointer hover:scale-105 transition-all">
+                          <CheckCircle2 size={40} strokeWidth={1.5} />
+                       </div>
+                       <div className="space-y-3">
+                         <h4 className="text-3xl font-black text-slate-900">恭喜，完成深读</h4>
+                         <p className="text-slate-400 font-bold">您已成功同步本篇文章的核心认知。右侧矩阵提供了更宏观的逻辑归纳。</p>
+                       </div>
+                    </div>
+                  </div>
+                </article>
+
+                {/* 底部留空 */}
+                <div className="h-20" />
               </div>
+            </div>
 
-              {/* 右侧分析侧边栏 */}
-              <aside className="w-[420px] border-l border-slate-100 bg-white flex flex-col shrink-0 animate-in slide-in-from-right duration-700 shadow-[-20px_0_40px_rgba(0,0,0,0.02)]">
+            {/* 右侧分析侧边栏 */}
+            <aside className="w-[420px] border-l border-slate-100 bg-white flex flex-col shrink-0 animate-in slide-in-from-right duration-700 shadow-[-20px_0_40px_rgba(0,0,0,0.02)]">
                 <div className="p-8 border-b border-slate-50 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
@@ -384,7 +358,7 @@ Scaling Law 的本质并不是工程参数的堆砌，而是将“能源”转�
                         <Layout size={14} /> 逻辑解构图
                       </h4>
                       {analysisData && (
-                        <button onClick={() => performAnalysis()} className="text-slate-300 hover:text-indigo-600 transition-all">
+                        <button onClick={() => performAnalysis(articleData?.content || '')} className="text-slate-300 hover:text-indigo-600 transition-all">
                           <RefreshCw size={14} className={isAnalyzing ? 'animate-spin' : ''} />
                         </button>
                       )}
@@ -475,7 +449,6 @@ Scaling Law 的本质并不是工程参数的堆砌，而是将“能源”转�
                 </div>
               </aside>
             </div>
-          </>
         )}
       </main>
     </div>

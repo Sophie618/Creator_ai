@@ -12,11 +12,41 @@ from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
 
+import sqlite3
+from contextlib import contextmanager
+
 # 加载环境变量
 load_dotenv()
 
-# 内存存储已收录文章（后续可替换为数据库）
-collected_articles = []
+# SQLite 数据库初始化
+DB_PATH = "collector.db"
+
+def init_db():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS articles (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                url TEXT UNIQUE,
+                cover_image TEXT,
+                source TEXT,
+                word_count INTEGER,
+                estimated_time INTEGER,
+                status TEXT,
+                created_at TEXT,
+                content TEXT
+            )
+        """)
+init_db()
+
+@contextmanager
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 app = FastAPI()
 
@@ -56,6 +86,7 @@ class CollectedArticle(BaseModel):
     estimated_time: int
     status: str
     created_at: str
+    content: Optional[str] = None
 
 class ArticleListResponse(BaseModel):
     articles: List[CollectedArticle]
@@ -89,11 +120,25 @@ def read_root():
 
 def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[str]]:
     """抓取文章内容、标题、封面图和作者"""
-    # 使用 trafilatura.fetch_url 获取网页
-    downloaded = trafilatura.fetch_url(url)
+    
+    # 1. 使用 requests 获取网页源码 (更好地模拟浏览器，通过 headers 发送 User-Agent)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        downloaded = resp.text
+    except Exception as e:
+        print(f"Requests fetch failed, falling back to trafilatura fetch: {e}")
+        downloaded = trafilatura.fetch_url(url)
     
     if downloaded is None:
         raise HTTPException(status_code=400, detail="Failed to fetch URL")
+
+    # 简单的反爬虫检测
+    if "环境异常" in downloaded or "访问过于频繁" in downloaded:
+         raise HTTPException(status_code=403, detail="WeChat anti-scraping triggered (Environment Abnormal)")
 
     # 使用 bare_extraction 提取文本和元数据 (title, author, image)
     # 这会输出纯文本格式，保留段落结构，符合要求
@@ -121,28 +166,44 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
     if not content:
          raise HTTPException(status_code=400, detail="Could not extract text content")
 
-    # 增强封面图提取：如果你发现 trafilatura 提取的图片不准确，可以使用 BeautifulSoup 进行二次提取
-    # 尤其是针对微信公众号的懒加载图片 (data-src)
-    if not cover_image or "weixin" in url:
+    # 增强封面图和标题提取：
+    # 针对微信公众号等特定平台，trafilatura 有时无法获取正确的标题或懒加载图片
+    if not cover_image or not title or title == "未命名文章" or "weixin" in url:
         try:
             soup = BeautifulSoup(downloaded, "html.parser")
             
-            # 1. 优先尝试 og:image
-            og_image = soup.find("meta", property="og:image")
-            if og_image and og_image.get("content"):
-                cover_image = og_image.get("content").strip()
+            # 1. 标题增强提取 (针对微信公众号优化)
+            if not title or title == "未命名文章" or "weixin" in url:
+                wx_title = soup.find(id="activity-name")
+                if wx_title:
+                    title = wx_title.get_text(strip=True)
+                
+                if not title or title == "未命名文章":
+                    og_title = soup.find("meta", property="og:title")
+                    if og_title and og_title.get("content"):
+                        title = og_title.get("content").strip()
+                    elif soup.title and soup.title.string:
+                        title = soup.title.string.strip()
             
-            # 2. 如果 og:image 也没有，或者是微信文章，尝试找正文第一张图片
-            if not cover_image:
-                 all_imgs = soup.find_all("img")
-                 for img in all_imgs:
-                     src = img.get("data-src") or img.get("src") or ""
-                     # 微信特征
-                     if "0?wx_fmt=" in src or "wx_fmt=" in src:
-                         cover_image = src
-                         break
+            # 2. 封面图增强提取
+            if not cover_image or "weixin" in url:
+                 og_image = soup.find("meta", property="og:image")
+                 if og_image and og_image.get("content"):
+                     cover_image = og_image.get("content").strip()
+                 
+                 if not cover_image:
+                     all_imgs = soup.find_all("img")
+                     for img in all_imgs:
+                         src = img.get("data-src") or img.get("src") or ""
+                         if "0?wx_fmt=" in src or "wx_fmt=" in src:
+                             cover_image = src
+                             break
         except Exception as e:
-            print(f"Secondary image extraction failed: {e}")
+            print(f"Secondary extraction failed: {e}")
+
+    # 最后保底
+    if not title:
+        title = "未命名文章"
 
     return content, title, cover_image, author
 
@@ -163,26 +224,19 @@ def generate_quiz_from_text(text: str) -> dict:
 3. 选项严格固定为 ["是", "否"]。
 4. 必须从原文中摘录一段完全一致、未经修改（包括标点符号）的句子作为证据 (evidence)，用于揭示答案。
 
-Output JSON 格式（不要Markdown标记，仅返回JSON字符串）:
+注意：
+- 返回结果只能是纯 JSON 字符串，不能包含 Markdown 格式标记（如 ```json）。
+- 确保 JSON 格式合法，字符串内的特殊字符（如换行符）必须转义。
+- 确保所有引号成对出现。
+
+Output JSON 格式示例:
 {
   "questions": [
     {
       "question": "你认为...?",
       "options": ["是", "否"],
       "correct_answer": "是",
-      "evidence": "原文句子用于UI展示"
-    },
-    {
-      "question": "你认为...?",
-      "options": ["是", "否"],
-      "correct_answer": "否",
-      "evidence": "原文句子"
-    },
-    {
-      "question": "你认为...?",
-      "options": ["是", "否"],
-      "correct_answer": "是",
-      "evidence": "原文句子"
+      "evidence": "原文句子..."
     }
   ]
 }"""
@@ -193,13 +247,21 @@ Output JSON 格式（不要Markdown标记，仅返回JSON字符串）:
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"文章内容如下：\n\n{text}"}
-            ]
+            ],
+            temperature=0.1,
+            max_tokens=2000
         )
         
         content = completion.choices[0].message.content
         # 清理可能存在的 markdown 代码块标记
         cleaned_content = content.replace("```json", "").replace("```", "").strip()
-        return json.loads(cleaned_content)
+        
+        try:
+            return json.loads(cleaned_content)
+        except json.JSONDecodeError as je:
+             print(f"JSON Decode Error: {je}")
+             print(f"Bad JSON Content: {cleaned_content}")
+             raise ValueError(f"Invalid JSON returned from LLM: {je}")
         
     except Exception as e:
         print(f"Error in generating quiz: {e}")
@@ -250,28 +312,52 @@ def generate_quiz_endpoint(request: QuizRequest):
             source_cover=cover_image
         ))
     
-    # 5. 保存文章到收录列表（避免重复）
-    existing = next((a for a in collected_articles if a["url"] == request.url), None)
-    if not existing:
-        article_id = f"article_{len(collected_articles) + 1}_{datetime.now().timestamp()}"
-        collected_articles.append({
-            "id": article_id,
-            "title": page_title or "未命名文章",
-            "url": request.url,
-            "cover_image": cover_image,
-            "source": source_name,
-            "word_count": word_count,
-            "estimated_time": estimated_time,
-            "status": "quiz_generated",
-            "created_at": datetime.now().isoformat()
-        })
+    # 5. 保存文章到收录列表（持久化到 SQLite）
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM articles WHERE url = ?", (request.url,))
+        existing = cursor.fetchone()
+        
+        if not existing:
+            import uuid
+            article_id = f"art_{uuid.uuid4().hex[:8]}"
+            cursor.execute("""
+                INSERT INTO articles 
+                (id, title, url, cover_image, source, word_count, estimated_time, status, created_at, content)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                article_id,
+                page_title or "未命名文章",
+                request.url,
+                cover_image,
+                source_name,
+                word_count,
+                estimated_time,
+                "quiz_generated",
+                datetime.now().isoformat(),
+                full_content
+            ))
+            conn.commit()
         
     return QuizListResponse(items=items)
 
 @app.get("/api/collected-articles", response_model=ArticleListResponse)
 def get_collected_articles():
     """获取所有已收录的文章列表"""
-    articles = [
-        CollectedArticle(**article) for article in collected_articles
-    ]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM articles ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        articles = [CollectedArticle(**dict(row)) for row in rows]
     return ArticleListResponse(articles=articles)
+
+@app.get("/api/article/{article_id}", response_model=CollectedArticle)
+def get_single_article(article_id: str):
+    """获取单篇文章详情"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM articles WHERE id = ?", (article_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Article not found")
+        return CollectedArticle(**dict(row))
