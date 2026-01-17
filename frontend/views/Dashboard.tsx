@@ -67,14 +67,14 @@ const Dashboard: React.FC<DashboardProps> = ({
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold shadow-sm transition-all hover:bg-black active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isLoading ? <Loader2 className="animate-spin" size={16} /> : <ArrowRight size={16} />}
-            <span>分析</span>
+            <span>收录</span>
           </button>
         </div>
 
         {isLoading && (
           <div className="flex items-center gap-3 text-slate-500 text-sm">
             <Loader2 className="animate-spin text-indigo-600" size={18} />
-            <span>AI 正在解析链接...</span>
+            <span>AI 正在收录链接...</span>
           </div>
         )}
 
