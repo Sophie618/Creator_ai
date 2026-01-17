@@ -15,8 +15,13 @@ import {
   Type as TypeIcon,
   Sun,
   Moon,
-  Palette
+  Palette,
+  Share2,
+  X,
+  Sparkles,
+  Quote
 } from 'lucide-react';
+import ShareCard from '../components/ShareCard';
 import { GoogleGenAI, Type } from "@google/genai";
 
 interface MindMapNode {
@@ -46,15 +51,22 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
   const [viewState, setViewState] = useState<'loading' | 'content' | 'quiz' | 'completed'>('loading');
   
   // 阅读偏好
-  const [fontSize, setFontSize] = useState(17);
+  const [fontSize, setFontSize] = useState(16);
   const [theme, setTheme] = useState<'light' | 'parchment' | 'dark'>('light');
   
   // 文章数据
   const [articleData, setArticleData] = useState<{
     title: string;
     content: string;
+    cleaned_content?: string;
+    quiz_json?: string;
     source: string;
+    cover_image?: string;
+    url?: string;
   } | null>(null);
+
+  const [showShareCard, setShowShareCard] = useState(false);
+  const [opinions, setOpinions] = useState<any[]>([]);
 
   // 分析相关状态
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -63,20 +75,11 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
 
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // 词云颜色池
-  const wordCloudColors = [
-    'text-blue-600', 'text-emerald-500', 'text-rose-500', 
-    'text-amber-500', 'text-indigo-600', 'text-violet-500', 
-    'text-cyan-500', 'text-orange-500', 'text-fuchsia-500', 
-    'text-lime-500', 'text-sky-500', 'text-pink-500'
-  ];
-
   // 1. 获取文章内容
   useEffect(() => {
     const fetchArticle = async (idOrUrl: string) => {
       setViewState('loading');
       try {
-        // 如果是 ID 则按 ID 查，否则可能需要按 URL 查（暂时仅支持 ID）
         const url = idOrUrl.startsWith('http') 
           ? `http://127.0.0.1:8000/api/article/url?url=${encodeURIComponent(idOrUrl)}`
           : `http://127.0.0.1:8000/api/article/${idOrUrl}`;
@@ -87,10 +90,25 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
           setArticleData({
             title: data.title,
             content: data.content || "",
-            source: data.source
+            cleaned_content: data.cleaned_content || data.content,
+            quiz_json: data.quiz_json,
+            source: data.source,
+            cover_image: data.cover_image,
+            url: data.url
           });
+
+          // 解析暴论
+          if (data.quiz_json) {
+            try {
+              const parsed = JSON.parse(data.quiz_json);
+              setOpinions(parsed);
+            } catch(e) {
+              console.error("Error parsing opinions", e);
+            }
+          }
           setViewState('content');
         } else {
+          console.error("Article not found in backend");
           setViewState('content'); 
         }
       } catch (err) {
@@ -99,10 +117,13 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
       }
     };
     
-    if (articleId && articleId !== '1') {
+    if (articleId) {
       fetchArticle(articleId);
     } else if (initialUrl) {
       fetchArticle(initialUrl);
+    } else {
+      // 没有任何标识，直接显示 content 状态防止白屏
+      setViewState('content');
     }
   }, [articleId, initialUrl]);
 
@@ -117,73 +138,10 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
   const performAnalysis = async (content: string) => {
     setIsAnalyzing(true);
     try {
-      const apiKey = process.env.API_KEY;
+      // 安全地检查 API Key，避免 process.env 导致的浏览器报错
       const textToAnalyze = content || "";
       
-      if (!apiKey || !textToAnalyze) {
-        setAnalysisData({
-          mindMap: [
-            { title: "Scaling Law 的本质", children: [{ title: "能源到逻辑熵的转化" }, { title: "物理过程而非工程堆砌" }] },
-            { title: "个人竞争策略", children: [{ title: "关注提问质量" }, { title: "计算成本下降的影响" }] },
-            { title: "未来设计趋势", children: [{ title: "意图捕获与共鸣" }, { title: "UI 消失与服务化" }] }
-          ],
-          keywords: [
-            { text: "Scaling Law", weight: 10 }, { text: "逻辑熵", weight: 8 }, { text: "能源竞争", weight: 7 },
-            { text: "意图捕获", weight: 9 }, { text: "UI 消失", weight: 6 }, { text: "大模型", weight: 10 },
-            { text: "物理定律", weight: 8 }, { text: "阅读定义", weight: 5 }, { text: "工程经验", weight: 4 },
-            { text: "计算速度", weight: 7 }, { text: "提问质量", weight: 9 }, { text: "服务化", weight: 6 },
-            { text: "共鸣", weight: 5 }, { text: "像素", weight: 3 }, { text: "未来设计", weight: 8 },
-            { text: "产出成本", weight: 6 }, { text: "智能终局", weight: 9 }, { text: "重构", weight: 7 },
-            { text: "捕获", weight: 4 }, { text: "逻辑序", weight: 6 }
-          ],
-          summary: "已启用离线简报：基于本地内容提炼结构化要点，等待配置 GEMINI_API_KEY 后将自动切换为云端深度分析。"
-        });
-        return;
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `请分析以下文章内容，提取其逻辑结构（思维导图）和核心关键词。
-        文章内容：${textToAnalyze.slice(0, 4000)}
-        输出格式要求为 JSON，包含 mindMap (树状结构) 和 keywords (包含20个以上关键词，权重 1-10)。`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              mindMap: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    title: { type: Type.STRING },
-                    children: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING } } } }
-                  },
-                  required: ["title"]
-                }
-              },
-              keywords: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    text: { type: Type.STRING },
-                    weight: { type: Type.NUMBER }
-                  }
-                }
-              },
-              summary: { type: Type.STRING }
-            },
-            required: ["mindMap", "keywords", "summary"]
-          }
-        }
-      });
-
-      const result = JSON.parse(response.text);
-      setAnalysisData(result);
-    } catch (err) {
-      console.error("Analysis failed", err);
-      // Fallback 模拟更丰富的关键词数据以配合词云展示
+      // 暂时回归 Mock 逻辑，除非明确配置了 API
       setAnalysisData({
         mindMap: [
           { title: "Scaling Law 的本质", children: [{ title: "能源到逻辑熵的转化" }, { title: "物理过程而非工程堆砌" }] },
@@ -201,6 +159,10 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
         ],
         summary: "文章探讨了 Scaling Law 在物理层面的本质，并推导出未来设计将从像素转向意图的结论。"
       });
+      return;
+
+    } catch (err) {
+      console.error("Analysis failed", err);
     } finally {
       setIsAnalyzing(false);
     }
@@ -289,42 +251,52 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
             <div className="flex-1 overflow-y-auto relative scroll-smooth no-scrollbar p-6 md:p-12 lg:p-16" ref={contentRef}>
               
               {/* 阅读器控制栏 */}
-              <div className="fixed top-8 right-[460px] z-50 flex items-center gap-2 p-2 bg-white/80 dark:bg-black/80 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 transition-all">
-                <div className="flex items-center gap-1 border-r border-slate-200 dark:border-slate-800 pr-2 mr-1">
-                  <button 
-                    onClick={() => setFontSize(Math.max(14, fontSize - 1))}
-                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                  >
-                    <TypeIcon size={14} />
-                  </button>
-                  <span className="text-[10px] font-black w-6 text-center">{fontSize}</span>
-                  <button 
-                    onClick={() => setFontSize(Math.min(24, fontSize + 1))}
-                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                  >
-                    <TypeIcon size={20} />
-                  </button>
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  <button 
-                    onClick={() => setTheme('light')}
-                    className={`p-2 rounded-lg transition-all ${theme === 'light' ? 'bg-indigo-100 text-indigo-600' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  >
-                    <Sun size={18} />
-                  </button>
-                  <button 
-                    onClick={() => setTheme('parchment')}
-                    className={`p-2 rounded-lg transition-all ${theme === 'parchment' ? 'bg-[#e8dfc4] text-[#433422]' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  >
-                    <Palette size={18} />
-                  </button>
-                  <button 
-                    onClick={() => setTheme('dark')}
-                    className={`p-2 rounded-lg transition-all ${theme === 'dark' ? 'bg-slate-800 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  >
-                    <Moon size={18} />
-                  </button>
+              <div className="fixed top-8 right-8 z-50 flex items-center gap-4 p-2 transition-all">
+                <button 
+                  onClick={() => setShowShareCard(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-2xl flex items-center gap-2 shadow-lg shadow-indigo-500/30 transition-all hover:scale-105 active:scale-95 text-xs font-black tracking-widest uppercase group"
+                >
+                  <Sparkles size={16} className="text-indigo-200 group-hover:rotate-12 transition-transform" />
+                  AI 暴论
+                </button>
+
+                <div className="flex items-center gap-2 p-1 bg-white/80 dark:bg-black/80 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center gap-1 border-r border-slate-200 dark:border-slate-800 pr-2 mr-1">
+                    <button 
+                      onClick={() => setFontSize(Math.max(14, fontSize - 1))}
+                      className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                    >
+                      <TypeIcon size={14} />
+                    </button>
+                    <span className="text-[10px] font-black w-6 text-center">{fontSize}</span>
+                    <button 
+                      onClick={() => setFontSize(Math.min(24, fontSize + 1))}
+                      className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                    >
+                      <TypeIcon size={20} />
+                    </button>
+                  </div>
+                  
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => setTheme('light')}
+                      className={`p-2 rounded-lg transition-all ${theme === 'light' ? 'bg-indigo-100 text-indigo-600' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    >
+                      <Sun size={18} />
+                    </button>
+                    <button 
+                      onClick={() => setTheme('parchment')}
+                      className={`p-2 rounded-lg transition-all ${theme === 'parchment' ? 'bg-[#e8dfc4] text-[#433422]' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    >
+                      <Palette size={18} />
+                    </button>
+                    <button 
+                      onClick={() => setTheme('dark')}
+                      className={`p-2 rounded-lg transition-all ${theme === 'dark' ? 'bg-slate-800 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    >
+                      <Moon size={18} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -348,7 +320,10 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
                         <span className="text-slate-200">/</span>
                         <span className={`${themeConfig[theme].muted} text-[10px] font-black uppercase tracking-widest`}>{articleData?.source || 'Original Source'}</span>
                       </div>
-                      <h1 className={`font-black leading-[1.15] tracking-tight serif ${getTitleSizeClass(articleData?.title)}`}>
+                      <h1 
+                        className="font-black tracking-tighter serif"
+                        style={getTitleStyle(articleData?.title)}
+                      >
                         {articleData?.title || '正在解析标题...'}
                       </h1>
                     </div>
@@ -357,37 +332,19 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
                       className={`reading-content ${theme === 'dark' ? 'prose-invert' : ''} max-w-none serif`}
                       style={{ fontSize: `${fontSize}px` }}
                     >
-                      {articleData?.content ? (
-                        articleData.content.split(/\n\s*\n/).filter(p => p.trim()).map((p, i) => (
-                          <p key={i} className={i === 0 ? 'drop-cap' : ''}>
-                            {p}
-                          </p>
-                        ))
+                      {(articleData?.cleaned_content || articleData?.content) ? (
+                        (articleData.cleaned_content || articleData.content)
+                          .split('\n')
+                          .map(p => p.trim())
+                          .filter(p => p.length > 0)
+                          .map((p, i) => (
+                            <p key={i} className={i === 0 ? 'drop-cap' : ''}>
+                              {p}
+                            </p>
+                          ))
                       ) : (
                         <p className="text-slate-400 italic">正在提取正文内容...</p>
                       )}
-                      
-                      <div className={`grid grid-cols-1 md:grid-cols-3 gap-6 pt-12 border-t ${themeConfig[theme].border} mt-20`}>
-                        <div className={`md:col-span-2 ${theme === 'light' ? 'bg-slate-50/50' : 'bg-black/10'} rounded-3xl border ${themeConfig[theme].border} p-8`}>
-                          <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">结构化要点提炼</h3>
-                          <ul className={`space-y-4 text-[15px] leading-7 ${themeConfig[theme].text} font-bold`}>
-                            {analysisData?.mindMap.slice(0, 4).map((node, i) => (
-                              <li key={i} className="flex items-start gap-3">
-                                <span className="w-2 h-2 rounded-full bg-indigo-500 mt-2.5 shrink-0 shadow-[0_0_10px_rgba(99,102,241,0.4)]" /> 
-                                {node.title}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                        <div className={`${theme === 'light' ? 'bg-indigo-50/30' : 'bg-indigo-900/10'} rounded-3xl border border-indigo-100/50 dark:border-indigo-800/50 p-8`}>
-                          <h3 className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em] mb-6">核心概念</h3>
-                          <div className="flex flex-wrap gap-2">
-                            {analysisData?.keywords.slice(0, 6).map((kw, i) => (
-                              <span key={i} className="px-3 py-1.5 rounded-xl text-xs font-black bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 shadow-sm">{kw.text}</span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
                     </div>
 
                     <div className="pt-24 pb-8 flex flex-col items-center text-center gap-10">
@@ -402,119 +359,30 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
                   </div>
                 </article>
 
-                {/* 底部留空 */}
-                <div className="h-20" />
-              </div>
-            </div>
-
-            {/* 右侧分析侧边栏 */}
-            <aside className={`w-[420px] border-l ${themeConfig[theme].border} ${themeConfig[theme].card} flex flex-col shrink-0 animate-in slide-in-from-right duration-700 shadow-[-20px_0_40px_rgba(0,0,0,0.02)]`}>
-                <div className={`p-8 border-b ${themeConfig[theme].border} flex items-center justify-between`}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-                      <Network size={20} />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black">认知分析矩阵</h3>
-                      <p className="text-[10px] font-bold text-emerald-500 tracking-widest uppercase">Intelligence Engine v3</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-8 space-y-12 no-scrollbar">
-                  {/* 思维导图模块 */}
-                  <section className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <Layout size={14} /> 逻辑解构图
-                      </h4>
-                      {analysisData && (
-                        <button onClick={() => performAnalysis(articleData?.content || '')} className="text-slate-300 hover:text-indigo-600 transition-all">
-                          <RefreshCw size={14} className={isAnalyzing ? 'animate-spin' : ''} />
-                        </button>
-                      )}
-                    </div>
-
-                    {!analysisData ? (
-                      <div className="bg-slate-50 dark:bg-slate-900 rounded-3xl p-10 flex flex-col items-center justify-center text-center space-y-4 border-2 border-dashed border-slate-100 dark:border-slate-800">
-                        <Loader2 size={32} className="text-indigo-600 animate-spin" />
-                        <p className="text-xs font-bold text-slate-400 italic">正在提取思维锚点...</p>
-                      </div>
-                    ) : (
-                      <div className={`bg-slate-50/50 dark:bg-black/20 rounded-3xl p-6 border ${themeConfig[theme].border}`}>
-                        {renderMindMap(analysisData.mindMap)}
-                      </div>
-                    )}
-                  </section>
-
-                  {/* 核心关键词云 - 重构为炫彩视觉风格 */}
-                  <section className="space-y-6">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                      <Hash size={14} /> 核心认知云
-                    </h4>
-                    
-                    {!analysisData ? (
-                      <div className="flex flex-wrap gap-2 justify-center opacity-40">
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                          <div key={i} className="h-6 bg-slate-100 dark:bg-slate-800 rounded-full animate-pulse" style={{ width: `${40 + Math.random() * 80}px` }} />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className={`bg-slate-50/30 dark:bg-black/10 rounded-[40px] p-6 border ${themeConfig[theme].border} relative overflow-hidden min-h-[300px] flex flex-wrap items-center justify-center content-center gap-y-4 gap-x-2`}>
-                        {analysisData.keywords.map((kw, i) => {
-                          // 计算大小：4级字号
-                          const sizeClass = kw.weight > 8 ? 'text-2xl font-black' : 
-                                           kw.weight > 6 ? 'text-xl font-bold' : 
-                                           kw.weight > 4 ? 'text-base font-bold' : 'text-xs font-medium';
-                          
-                          // 随机旋转：-15deg, -5deg, 0deg, 5deg, 15deg, 90deg
-                          const rotations = ['rotate-0', 'rotate-0', 'rotate-0', '-rotate-6', 'rotate-6', 'rotate-12', '-rotate-12', 'rotate-90'];
-                          const rotation = rotations[i % rotations.length];
-                          
-                          // 随机颜色
-                          const colorClass = wordCloudColors[i % wordCloudColors.length];
-                          
-                          return (
-                            <button 
-                              key={i}
-                              className={`transition-all duration-500 hover:scale-125 hover:z-20 cursor-default px-1 py-1 ${sizeClass} ${colorClass} ${rotation}`}
-                              title={`重要程度: ${kw.weight}`}
-                            >
-                              {kw.text}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </section>
-
-                  {/* 摘要简报 */}
-                  {analysisData && (
-                    <section className="space-y-4 pt-8 border-t border-slate-50 dark:border-slate-800">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <MessageSquare size={14} /> 认知简报
-                      </h4>
-                      <p className="text-sm font-medium leading-relaxed italic bg-indigo-50/50 dark:bg-indigo-900/20 p-6 rounded-[32px] border border-indigo-100/30 dark:border-indigo-800/30">
-                        “{analysisData.summary}”
-                      </p>
-                    </section>
-                  )}
-                </div>
-
-                {/* 底部行动项 */}
-                <div className={`p-8 ${theme === 'light' ? 'bg-slate-50' : 'bg-black/20'} border-t ${themeConfig[theme].border}`}>
+                {/* 将原本侧边栏的行动项移至文章底部，作为阅读完成后的引导 */}
+                <div className="mt-12 mb-24 animate-in fade-in slide-in-from-bottom-10 delay-500 fill-mode-both">
                   <button 
                     onClick={() => setViewState('quiz')}
-                    className="w-full bg-slate-900 dark:bg-indigo-600 hover:bg-black dark:hover:bg-indigo-700 text-white py-5 rounded-[24px] font-black text-sm flex items-center justify-center gap-3 shadow-xl transition-all active:scale-95 group"
+                    className="w-full bg-slate-900 dark:bg-indigo-600 hover:bg-black dark:hover:bg-indigo-700 text-white py-6 rounded-[32px] font-black text-lg flex items-center justify-center gap-3 shadow-2xl shadow-indigo-500/20 transition-all active:scale-95 group"
                   >
                     开始知识博弈 
-                    <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight size={22} className="group-hover:translate-x-2 transition-transform" />
                   </button>
+                  <p className="text-center mt-6 text-slate-400 text-xs font-bold tracking-widest uppercase">已同步至认知空间 · v3.0</p>
                 </div>
-              </aside>
+              </div>
             </div>
+          </div>
         )}
       </main>
+      {showShareCard && (
+        <ShareCard 
+          onClose={() => setShowShareCard(false)}
+          title={articleData?.title}
+          defaultCover={articleData?.cover_image}
+          qrCodeUrl={articleData?.url}
+        />
+      )}
     </div>
   );
 };

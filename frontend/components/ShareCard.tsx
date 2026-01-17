@@ -92,7 +92,7 @@ interface Frame2Props {
 function Frame2({ gradientColors, title }: Frame2Props) {
   return (
     <div 
-      className="absolute bottom-0 content-stretch flex flex-col gap-[10px] items-start left-0 px-[20px] py-0 w-[353px]"
+      className="absolute bottom-0 flex flex-col gap-[10px] items-start left-0 px-[20px] py-0 w-[353px]"
       style={{
         background: `linear-gradient(to bottom, ${gradientColors.topColor}, ${gradientColors.bottomColor})`
       }}
@@ -138,16 +138,26 @@ function Frame3({ uploadedImage, onImageUpload, gradientColors, title, defaultCo
       >
         <div aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden rounded-t-[10px]">
           {uploadedImage ? (
-            <img alt="" className="absolute max-w-none object-cover size-full" src={uploadedImage} />
+            <img 
+              alt="" 
+              crossOrigin="anonymous"
+              className="absolute max-w-none object-cover size-full" 
+              src={uploadedImage} 
+            />
           ) : (
             <>
               {defaultCover ? (
-                <img alt="" className="absolute max-w-none object-cover size-full" src={defaultCover} />
+                <img 
+                  alt="" 
+                  crossOrigin="anonymous"
+                  className="absolute max-w-none object-cover size-full" 
+                  src={defaultCover} 
+                />
               ) : (
                  // Default fallback if no cover provided
                  <>
-                   <img alt="" className="absolute max-w-none object-cover size-full" src={imgRectangle4} />
-                   <img alt="" className="absolute max-w-none object-cover size-full" src={imgRectangle5} />
+                   <img alt="" crossOrigin="anonymous" className="absolute max-w-none object-cover size-full" src={imgRectangle4} />
+                   <img alt="" crossOrigin="anonymous" className="absolute max-w-none object-cover size-full" src={imgRectangle5} />
                  </>
               )}
             </>
@@ -177,9 +187,9 @@ function Frame3({ uploadedImage, onImageUpload, gradientColors, title, defaultCo
 
 function Frame5() {
   return (
-    <div className="content-stretch flex gap-[5px] items-center relative shrink-0">
+    <div className="flex gap-[5px] items-center relative shrink-0">
       <div className="relative rounded-[20px] shrink-0 size-[20px] overflow-hidden">
-        <img alt="" className="absolute inset-0 max-w-none object-cover pointer-events-none size-full" src={imgRectangle6} />
+        <img alt="" crossOrigin="anonymous" className="absolute inset-0 max-w-none object-cover pointer-events-none size-full" src={imgRectangle6} />
       </div>
       <p className="font-['PingFang_SC:Regular',sans-serif] leading-[normal] not-italic relative shrink-0 text-[12px] text-black">全糖可乐</p>
     </div>
@@ -190,17 +200,25 @@ interface Frame1Props {
   qrCodeUrl?: string;
 }
 
-function Frame1({  }: Frame1Props) {
+function Frame1({ qrCodeUrl }: Frame1Props) {
+  // Use a public QR code API if none provided or just use the current URL
+  const qrData = qrCodeUrl || window.location.href;
+  const qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+
   return (
     <div className="relative shrink-0 w-full">
       <div className="flex flex-row items-center size-full">
         <div className="flex items-center justify-between p-[20px] relative w-full">
           <div className="flex items-center gap-[10px]">
-            <div className="bg-[#f4f4f4] rounded-[5px] shrink-0 size-[35px] flex items-center justify-center overflow-hidden">
-              {/* QR Code Placeholder */}
-              <div className="w-full h-full bg-slate-200"></div>
+            <div className="bg-white rounded-[5px] shrink-0 size-[45px] flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
+              <img 
+                alt="QR Code" 
+                crossOrigin="anonymous"
+                className="size-[35px]" 
+                src={qrImage} 
+              />
             </div>
-            <p className="font-['PingFang_SC:Regular',sans-serif] leading-[normal] not-italic relative text-[13px] text-black">扫码阅读</p>
+            <p className="font-['PingFang_SC:Regular',sans-serif] leading-[normal] not-italic relative text-[13px] text-black/60">扫码加入深度阅读</p>
           </div>
           <Frame5 />
         </div>
@@ -228,7 +246,10 @@ export default function ShareCard({ onClose, title, defaultCover, qrCodeUrl }: S
   const proxyCoverUrl = React.useMemo(() => {
     if (!defaultCover) return undefined;
     if (defaultCover.startsWith('data:') || defaultCover.startsWith('/')) return defaultCover;
-    return `http://127.0.0.1:8000/proxy-image?url=${encodeURIComponent(defaultCover)}`;
+    
+    // We assume backend is on port 8000 based on previous implementation
+    const host = window.location.hostname || '127.0.0.1';
+    return `http://${host}:8000/proxy-image?url=${encodeURIComponent(defaultCover)}`;
   }, [defaultCover]);
 
   // If a default cover is provided (and no user upload), extract colors from it
@@ -263,20 +284,43 @@ export default function ShareCard({ onClose, title, defaultCover, qrCodeUrl }: S
   };
   
   const handleDownload = async () => {
-    if (cardRef.current) {
-      try {
-        const canvas = await html2canvas(cardRef.current, {
-          backgroundColor: null,
-          scale: 2
+    if (!cardRef.current) return;
+    
+    try {
+      // 1. Ensure all images are loaded
+      const images = cardRef.current.getElementsByTagName('img');
+      const loadPromises = Array.from(images).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve; // Continue even if one fails
         });
-        const link = document.createElement('a');
-        link.download = `share-card-${Date.now()}.png`;
-        link.href = canvas.toDataURL();
-        link.click();
-      } catch (err) {
-        console.error("Failed to generate image", err);
-        alert("Failed to generate image");
-      }
+      });
+      await Promise.all(loadPromises);
+
+      // 2. Short delay for style recalculation
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // 3. Capture with specific options to avoid offset issues in modals
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: null,
+        scale: 3, // Higher scale for better quality
+        useCORS: true,
+        allowTaint: false,
+        logging: true,
+        scrollX: 0,
+        scrollY: -window.scrollY, // Adjust for window scroll if inside a fixed modal
+        windowWidth: document.documentElement.offsetWidth,
+        windowHeight: document.documentElement.offsetHeight
+      });
+
+      const link = document.createElement('a');
+      link.download = `Collector-AI-暴论-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      link.click();
+    } catch (err) {
+      console.error("Failed to generate image", err);
+      alert("保存失败，请稍后重试");
     }
   };
 
@@ -294,7 +338,7 @@ export default function ShareCard({ onClose, title, defaultCover, qrCodeUrl }: S
         {/* Card Container */}
         <div 
           ref={cardRef}
-          className="content-stretch flex flex-col items-start overflow-clip relative rounded-[10px] w-[353px] shadow-2xl"
+          className="flex flex-col items-start overflow-hidden relative rounded-[10px] w-[353px] shadow-2xl"
           style={{ backgroundColor: gradientColors.bottomColor }}
         >
           <Frame3 

@@ -34,9 +34,20 @@ def init_db():
                 estimated_time INTEGER,
                 status TEXT,
                 created_at TEXT,
-                content TEXT
+                content TEXT,
+                cleaned_content TEXT,
+                quiz_json TEXT
             )
         """)
+        # 尝试添加列（如果表已存在）
+        try:
+            conn.execute("ALTER TABLE articles ADD COLUMN cleaned_content TEXT")
+        except sqlite3.OperationalError:
+            pass 
+        try:
+            conn.execute("ALTER TABLE articles ADD COLUMN quiz_json TEXT")
+        except sqlite3.OperationalError:
+            pass
 init_db()
 
 @contextmanager
@@ -88,6 +99,8 @@ class CollectedArticle(BaseModel):
     status: str
     created_at: str
     content: Optional[str] = None
+    cleaned_content: Optional[str] = None
+    quiz_json: Optional[str] = None
 
 class ArticleListResponse(BaseModel):
     articles: List[CollectedArticle]
@@ -225,13 +238,13 @@ def generate_quiz_from_text(text: str) -> dict:
 3. 选项严格固定为 ["是", "否"]。
 4. 必须从原文中摘录一段完全一致、未经修改（包括标点符号）的句子作为证据 (evidence)。
 5. **文章清洗**：去除原文开头的“编辑：xxx”、“作者：xxx”、“来源：xxx”以及文末的版权声明、点赞关注引导等无关正文的噪音。直接从真正的正文第一句开始。
-6. **分段保留**：在返回的 `cleaned_content` 中，**必须**使用两个换行符 `\n\n` 来明确分隔不同的段落，确保排版清晰。
+6. **分段保留**：在返回的 `cleaned_content` 中，**必须**使用两个换行符 `\n\n` 来明确分隔不同的段落，确保排版清晰。即使原文的分段不明显，你也应该根据语义进行合理的分段，每段文字不宜过长。
 
 注意：
 - 返回结果只能是纯 JSON 字符串，不能包含 Markdown 格式标记。
 - 如果文章开头有关于作者或来源的简短介绍（属于文章背景信息），可以保留；但行政类的元数据（如“记者 姚顺雨 报道”）必须剔除。
 - 确保首段是引人入胜的正文开始，以便我们进行“首字放大”设计。
-- **特别重要**：对于 `cleaned_content` 字段，请确保输出为标准的 JSON 字符串。如果正文包含引号，请务必转义为 `\"`。所有的换行符必须对应 JSON 中的 `\n`。
+- **特别重要**：对于 `cleaned_content` 字段，请确保输出为标准的 JSON 字符串。如果正文包含引号，请务必转义为 `\"`。所有的换行符必须对应 JSON 中的 `\\n`（在 Python 字符串中即 \n）。不要直接在 JSON 字符串里换行。
 
 Output JSON 格式示例:
 {
@@ -334,6 +347,8 @@ def generate_quiz_endpoint(request: QuizRequest):
     
     # 5. 保存文章到收录列表（持久化到 SQLite）
     article_id = None
+    quiz_json_str = json.dumps(raw_questions, ensure_ascii=False)
+    
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM articles WHERE url = ?", (request.url,))
@@ -344,8 +359,8 @@ def generate_quiz_endpoint(request: QuizRequest):
             article_id = f"art_{uuid.uuid4().hex[:8]}"
             cursor.execute("""
                 INSERT INTO articles 
-                (id, title, url, cover_image, source, word_count, estimated_time, status, created_at, content)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, title, url, cover_image, source, word_count, estimated_time, status, created_at, content, cleaned_content, quiz_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 article_id,
                 page_title or "未命名文章",
@@ -356,11 +371,20 @@ def generate_quiz_endpoint(request: QuizRequest):
                 estimated_time,
                 "quiz_generated",
                 datetime.now().isoformat(),
-                cleaned_content
+                full_content,
+                cleaned_content,
+                quiz_json_str
             ))
             conn.commit()
         else:
             article_id = existing["id"]
+            # 即使已经存在，也更新一下清洗后的内容、标题和题目
+            cursor.execute("""
+                UPDATE articles 
+                SET title = ?, content = ?, cleaned_content = ?, quiz_json = ?, status = 'quiz_generated'
+                WHERE id = ?
+            """, (page_title or "未命名文章", full_content, cleaned_content, quiz_json_str, article_id))
+            conn.commit()
         
     return QuizListResponse(items=items, article_id=article_id)
 

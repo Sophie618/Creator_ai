@@ -144,7 +144,7 @@ const App: React.FC = () => {
           <ReaderView 
             articleId={selectedArticleId || ''} 
             initialUrl={targetUrl}
-            onBack={() => setCurrentView(View.DASHBOARD)} 
+            onBack={() => setCurrentView(View.LIBRARY)} 
           />
         );
       case View.KNOWLEDGE:
