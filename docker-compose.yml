@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 后端 FastAPI 服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: collector_ai_backend
+    ports:
+      - "8000:8000"
+    environment:
+      # 从 .env 文件或环境变量读取
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+    restart: unless-stopped
+    networks:
+      - collector_network
+    # 可选：挂载数据卷持久化存储
+    # volumes:
+    #   - ./data:/app/data
+
+  # 前端 React + Nginx 服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: collector_ai_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - collector_network
+    # 如果需要修改后端 API 地址，可以通过环境变量传递
+    # environment:
+    #   - VITE_API_URL=http://backend:8000
+
+networks:
+  collector_network:
+    driver: bridge
