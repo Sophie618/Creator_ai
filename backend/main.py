@@ -75,6 +75,7 @@ class SingleQuiz(BaseModel):
 
 class QuizListResponse(BaseModel):
     items: List[SingleQuiz]
+    article_id: Optional[str] = None
 
 class CollectedArticle(BaseModel):
     id: str
@@ -217,17 +218,20 @@ def generate_quiz_from_text(text: str) -> dict:
         base_url="https://api.minimax.chat/v1"
     )
 
-    system_prompt = """你是一个擅长制造悬念、引导读者进行“直觉竞猜”的专栏编辑。
+    system_prompt = """你是一个专业的长文排版和认知提取专家。
 任务：
 1. 阅读文章，找到 **3个** 有明显区别、反直觉、有争议或颠覆性的观点或数据。
 2. 将每个观点转化为一个以“你认为”开头的封闭式二元竞猜题（Bet）。
 3. 选项严格固定为 ["是", "否"]。
-4. 必须从原文中摘录一段完全一致、未经修改（包括标点符号）的句子作为证据 (evidence)，用于揭示答案。
+4. 必须从原文中摘录一段完全一致、未经修改（包括标点符号）的句子作为证据 (evidence)。
+5. **文章清洗**：去除原文开头的“编辑：xxx”、“作者：xxx”、“来源：xxx”以及文末的版权声明、点赞关注引导等无关正文的噪音。直接从真正的正文第一句开始。
+6. **分段保留**：在返回的 `cleaned_content` 中，**必须**使用两个换行符 `\n\n` 来明确分隔不同的段落，确保排版清晰。
 
 注意：
-- 返回结果只能是纯 JSON 字符串，不能包含 Markdown 格式标记（如 ```json）。
-- 确保 JSON 格式合法，字符串内的特殊字符（如换行符）必须转义。
-- 确保所有引号成对出现。
+- 返回结果只能是纯 JSON 字符串，不能包含 Markdown 格式标记。
+- 如果文章开头有关于作者或来源的简短介绍（属于文章背景信息），可以保留；但行政类的元数据（如“记者 姚顺雨 报道”）必须剔除。
+- 确保首段是引人入胜的正文开始，以便我们进行“首字放大”设计。
+- **特别重要**：对于 `cleaned_content` 字段，请确保输出为标准的 JSON 字符串。如果正文包含引号，请务必转义为 `\"`。所有的换行符必须对应 JSON 中的 `\n`。
 
 Output JSON 格式示例:
 {
@@ -238,7 +242,8 @@ Output JSON 格式示例:
       "correct_answer": "是",
       "evidence": "原文句子..."
     }
-  ]
+  ],
+  "cleaned_content": "这是清洗后的正文第一段...\n\n这是第二段..."
 }"""
 
     try:
@@ -249,19 +254,31 @@ Output JSON 格式示例:
                 {"role": "user", "content": f"文章内容如下：\n\n{text}"}
             ],
             temperature=0.1,
-            max_tokens=2000
+            max_tokens=3000
         )
         
         content = completion.choices[0].message.content
-        # 清理可能存在的 markdown 代码块标记
-        cleaned_content = content.replace("```json", "").replace("```", "").strip()
+        # 1. 尝试找到 JSON 的边界 {}
+        import re
+        json_match = re.search(r'(\{.*\})', content, re.DOTALL)
+        if json_match:
+            cleaned_content = json_match.group(1)
+        else:
+            cleaned_content = content.replace("```json", "").replace("```", "").strip()
         
         try:
-            return json.loads(cleaned_content)
+            # 使用 strict=False 处理可能的未转义控制字符 (如换行)
+            return json.loads(cleaned_content, strict=False)
         except json.JSONDecodeError as je:
-             print(f"JSON Decode Error: {je}")
-             print(f"Bad JSON Content: {cleaned_content}")
-             raise ValueError(f"Invalid JSON returned from LLM: {je}")
+            # 最后的尝试：清理可能破坏 JSON 的换行
+            try:
+                # 尝试修复字符串内部未转义的换行
+                fixed_content = re.sub(r'(?<=[:[,])\s*\n\s*', ' ', cleaned_content)
+                return json.loads(fixed_content, strict=False)
+            except:
+                print(f"JSON Decode Error after fix: {je}")
+                print(f"Bad JSON Content: {cleaned_content}")
+                raise ValueError(f"Invalid JSON returned from LLM: {je}")
         
     except Exception as e:
         print(f"Error in generating quiz: {e}")
@@ -277,8 +294,11 @@ def generate_quiz_endpoint(request: QuizRequest):
     word_count = len(full_content)
     estimated_time = max(1, word_count // 400)  # 假设每分钟阅读400字
     
-    # 3. 调用 LLM 生成竞猜
+    # 3. 调用 LLM 生成竞猜和清洗内容
     quiz_data = generate_quiz_from_text(truncated_content)
+    
+    # 4. 获取清洗后的内容，如果 LLM 没返回则回退到 full_content
+    cleaned_content = quiz_data.get("cleaned_content", full_content)
     
     # 4. 组装最终返回
     raw_questions = quiz_data.get("questions", [])
@@ -313,6 +333,7 @@ def generate_quiz_endpoint(request: QuizRequest):
         ))
     
     # 5. 保存文章到收录列表（持久化到 SQLite）
+    article_id = None
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM articles WHERE url = ?", (request.url,))
@@ -335,11 +356,13 @@ def generate_quiz_endpoint(request: QuizRequest):
                 estimated_time,
                 "quiz_generated",
                 datetime.now().isoformat(),
-                full_content
+                cleaned_content
             ))
             conn.commit()
+        else:
+            article_id = existing["id"]
         
-    return QuizListResponse(items=items)
+    return QuizListResponse(items=items, article_id=article_id)
 
 @app.get("/api/collected-articles", response_model=ArticleListResponse)
 def get_collected_articles():
@@ -350,6 +373,17 @@ def get_collected_articles():
         rows = cursor.fetchall()
         articles = [CollectedArticle(**dict(row)) for row in rows]
     return ArticleListResponse(articles=articles)
+
+@app.get("/api/article/url", response_model=CollectedArticle)
+def get_article_by_url(url: str):
+    """根据 URL 获取文章详情"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM articles WHERE url = ?", (url,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Article not found")
+        return CollectedArticle(**dict(row))
 
 @app.get("/api/article/{article_id}", response_model=CollectedArticle)
 def get_single_article(article_id: str):

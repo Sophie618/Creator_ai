@@ -29,6 +29,7 @@ const App: React.FC = () => {
   // Dashboard state
   const [dashboardInput, setDashboardInput] = useState('');
   const [dashboardQuizData, setDashboardQuizData] = useState<SingleQuiz[] | null>(null);
+  const [currentArticleId, setCurrentArticleId] = useState<string | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   
@@ -100,6 +101,9 @@ const App: React.FC = () => {
       }
 
       const data: QuizListResponse = await response.json();
+      if (data.article_id) {
+        setCurrentArticleId(data.article_id);
+      }
       setDashboardQuizData(data.items);
     } catch (error) {
       console.error(error);
@@ -125,6 +129,7 @@ const App: React.FC = () => {
             inputValue={dashboardInput}
             setInputValue={setDashboardInput}
             quizData={dashboardQuizData}
+            articleId={currentArticleId}
             isLoading={dashboardLoading}
             currentQuestionIndex={currentQuestionIndex}
             onAnalyze={handleAnalyze}
@@ -137,7 +142,7 @@ const App: React.FC = () => {
       case View.READER:
         return (
           <ReaderView 
-            articleId={selectedArticleId || '1'} 
+            articleId={selectedArticleId || ''} 
             initialUrl={targetUrl}
             onBack={() => setCurrentView(View.DASHBOARD)} 
           />

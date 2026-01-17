@@ -62,6 +62,7 @@ export interface SingleQuiz {
 
 export interface QuizListResponse {
   items: SingleQuiz[];
+  article_id?: string;
 }
 
 export interface Quiz {

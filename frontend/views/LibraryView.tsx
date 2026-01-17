@@ -138,7 +138,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
           <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
             <div className="space-y-1">
               <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-4">
-                内容矩阵
+                收录
                 {!showAssistant && (
                   <button 
                     onClick={() => setShowAssistant(true)}

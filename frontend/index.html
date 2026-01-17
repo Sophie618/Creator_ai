@@ -13,19 +13,43 @@
           extend: {
             colors: {
               contribution: '#6C57F0',
+            },
+            fontFamily: {
+              sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', 'sans-serif'],
+              serif: ['"Playfair Display"', 'Georgia', 'serif', '"Source Han Serif SC"', '"Source Han Serif CN"', '"STSong"', '"SimSun"'],
             }
           }
         }
       }
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
     <style>
       body {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
         background-color: #f8fafc;
       }
       .serif {
-        font-family: 'Playfair+Display', serif;
+        font-family: "Playfair Display", Georgia, serif, "Source Han Serif SC", "Source Han Serif CN", "STSong", "SimSun";
+      }
+      /* 深度阅读优化类 */
+      .reading-content p {
+        margin-bottom: 2.5rem;
+        line-height: 2;
+        text-indent: 2em;
+        text-align: justify;
+      }
+      .reading-content .drop-cap {
+        text-indent: 0;
+      }
+      .reading-content .drop-cap::first-letter {
+        float: left;
+        font-size: 5rem;
+        line-height: 1;
+        margin-top: 0.15rem;
+        margin-right: 0.75rem;
+        font-weight: 900;
+        color: #6366f1; /* indigo-600 */
+        font-family: "Playfair Display", serif;
       }
       ::-webkit-scrollbar {
         width: 8px;

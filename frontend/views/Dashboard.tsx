@@ -9,6 +9,7 @@ interface DashboardProps {
   inputValue: string;
   setInputValue: (value: string) => void;
   quizData: SingleQuiz[] | null;
+  articleId: string | null;
   isLoading: boolean;
   currentQuestionIndex: number;
   onAnalyze: () => void;
@@ -17,10 +18,11 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  onStartReading: _onStartReading,
+  onStartReading,
   inputValue,
   setInputValue,
   quizData,
+  articleId,
   isLoading,
   currentQuestionIndex,
   onAnalyze,
@@ -80,6 +82,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="w-full max-w-4xl mt-12 animate-in slide-in-from-bottom-4 duration-700">
             <QuizCard
               key={currentQuestionIndex}
+              articleId={articleId || ""}
               question={quizData[currentQuestionIndex].question}
               options={quizData[currentQuestionIndex].options}
               evidence={quizData[currentQuestionIndex].evidence}
@@ -88,6 +91,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 sourceLogo={quizData[currentQuestionIndex].source_logo}
                 sourceCover={quizData[currentQuestionIndex].source_cover}
               onNext={onNext}
+              onDeepRead={(id) => onStartReading(id, inputValue)}
               isLast={currentQuestionIndex === quizData.length - 1}
             />
           </div>

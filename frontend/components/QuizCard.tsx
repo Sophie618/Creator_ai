@@ -4,6 +4,7 @@ import { Quote, ArrowRight, ExternalLink, Share2, Link as LinkIcon } from 'lucid
 import ShareCard from './ShareCard';
 
 interface QuizCardProps {
+  articleId: string;
   question: string;
   options: string[];
   evidence: string;
@@ -12,10 +13,12 @@ interface QuizCardProps {
   sourceLogo?: string;
   sourceCover?: string;
   onNext: () => void;
+  onDeepRead: (id: string) => void;
   isLast?: boolean;
 }
 
 const QuizCard: React.FC<QuizCardProps> = ({ 
+  articleId,
   question, 
   options, 
   evidence, 
@@ -24,6 +27,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
   sourceLogo,
   sourceCover,
   onNext, 
+  onDeepRead,
   isLast = false 
 }) => {
   const [hasAnswered, setHasAnswered] = useState(false);
@@ -139,33 +143,42 @@ const QuizCard: React.FC<QuizCardProps> = ({
               <p className="text-sm font-medium text-slate-800 truncate" title={question}>{displayTitle}</p>
             </div>
 
-            <div className="w-full flex items-center justify-end gap-3">
-              <a 
-                href={jumpUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-6 py-3 rounded-full border-2 border-slate-200 font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center justify-center gap-2"
-              >
-                <ExternalLink size={18} />
-                阅读原文
-              </a>
+            <div className="w-full flex items-center justify-between gap-3 pt-2">
+              <div className="flex gap-2">
+                <a 
+                  href={jumpUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3 rounded-full border-2 border-slate-200 text-slate-700 hover:bg-slate-50 transition-all"
+                  title="阅读原文"
+                >
+                  <ExternalLink size={20} />
+                </a>
+                <button 
+                  onClick={handleShare}
+                  className="p-3 rounded-full border-2 border-slate-200 text-slate-700 hover:bg-slate-50 transition-all"
+                  title="分享"
+                >
+                  <Share2 size={20} />
+                </button>
+              </div>
 
-              <button
-                onClick={onNext}
-                className="px-8 py-3 rounded-full bg-black text-white font-semibold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
-              >
-                下一题
-                <ArrowRight size={18} />
-              </button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => onDeepRead(articleId)}
+                  className="px-6 py-3 rounded-full border-2 border-slate-900 text-slate-900 font-bold hover:bg-slate-50 transition-all"
+                >
+                  进入深读
+                </button>
+                <button
+                  onClick={onNext}
+                  className="px-8 py-3 rounded-full bg-slate-900 text-white font-bold hover:bg-black transition-all flex items-center justify-center gap-2 shadow-lg"
+                >
+                  {isLast ? "完成" : "下一题"}
+                  <ArrowRight size={18} />
+                </button>
+              </div>
             </div>
-
-            <button
-              onClick={handleShare}
-              className="mt-1 px-6 py-3 rounded-full border-2 border-slate-200 font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center justify-center gap-2"
-            >
-              <Share2 size={18} />
-              分享
-            </button>
           </div>
         </div>
       </div>
