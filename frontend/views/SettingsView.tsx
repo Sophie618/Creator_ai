@@ -98,7 +98,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onUpgrade, initialTab, onTa
         </aside>
 
         {/* Content Area */}
-        <div className="flex-1 bg-white border border-slate-200 rounded-[40px] p-8 md:p-12 shadow-sm min-h-[600px]">
+        <div className="flex-1 bg-white border border-slate-200 rounded-[40px] p-8 md:p-12 shadow-sm">
           {renderContent()}
         </div>
       </div>
@@ -372,7 +372,7 @@ const InsightsManagementSection = () => {
 
 /* --- Help Section --- */
 const HelpSection = () => (
-  <div className="space-y-10 animate-in slide-in-from-right-4 duration-500">
+  <div className="space-y-10 animate-in slide-in-from-right-4 duration-500 col-flex">
     <div className="bg-indigo-600 rounded-[32px] p-8 text-white relative overflow-hidden">
       <Sparkles className="absolute -top-4 -right-4 text-white/10" size={120} />
       <h3 className="text-2xl font-bold mb-2">有什么可以帮您？</h3>
@@ -383,7 +383,6 @@ const HelpSection = () => (
     <div className="space-y-4">
       <h4 className="font-bold text-slate-900 mb-4">常见问题</h4>
       <FAQItem question="如何生成更高质量的挑战题目？" answer="您可以尝试导入结构更加清晰的文章，或者在系统设置中调整 AI 的分析倾向（深度/广度）。" />
-      <FAQItem question="答错题会影响我的 XP 吗？" answer="答错不会扣除 XP，但只有答对才能解锁下一章节并获得该章对应的 XP 奖励。" />
       <FAQItem question="支持离线阅读吗？" answer="目前需要联网解析文章。一旦解析完成并加载，只要浏览器不刷新，您可以在断网情况下完成已加载内容的闯关。" />
     </div>
   </div>

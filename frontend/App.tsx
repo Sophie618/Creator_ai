@@ -7,7 +7,7 @@ import {
   Settings,
   Flame,
   Check,
-  Circle
+  X
 } from 'lucide-react';
 import Dashboard from './views/Dashboard';
 import LibraryView from './views/LibraryView';
@@ -18,7 +18,7 @@ import LearningData from './views/LearningData';
 import PodcastView from './views/PodcastView';
 import SubscriptionView from './views/SubscriptionView';
 import { View, SingleQuiz, QuizListResponse } from './types';
-import Logo from '/Collector_logo_black_EN.png';
+import Logo from '../frontend/public/Collector_logo_black_EN.png';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
@@ -31,6 +31,19 @@ const App: React.FC = () => {
   const [dashboardQuizData, setDashboardQuizData] = useState<SingleQuiz[] | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  
+  // Check-in Modal state
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const contributionData = useMemo(() => {
+    // Generate 5 weeks * 7 days = 35 days of data to simulate a month view
+    // 0: no contribution, 1-5: increasing intensity
+    return Array.from({ length: 35 }).map(() => {
+      // Skew towards having some data
+      const rand = Math.random();
+      if (rand < 0.3) return 0;
+      return Math.ceil(Math.random() * 5); 
+    });
+  }, []);
 
   const navigateToReader = (articleId: string, url: string = '') => {
     setSelectedArticleId(articleId);
@@ -46,10 +59,22 @@ const App: React.FC = () => {
     return Array.from({ length: 7 }).map((_, idx) => {
       const date = new Date(monday);
       date.setDate(monday.getDate() + idx);
+      
+      // Logic for demo: 
+      // - Future days are not done.
+      // - Today is not done (to show target).
+      // - Past days are mostly done, but simulate a missed day (e.g., Wednesday/idx 2).
+      const isFuture = date.getTime() > today.getTime();
+      const isToday = date.toDateString() === today.toDateString();
+      // Simulate "Wednesday missed" (idx 2)
+      const isMissed = idx === 2; 
+      
+      const done = !isFuture && !isToday && !isMissed;
+
       return {
         label: date.getDate(),
-        done: date.getTime() <= today.getTime(),
-        isToday: date.toDateString() === today.toDateString(),
+        done,
+        isToday,
       };
     });
   }, []);
@@ -168,7 +193,7 @@ const App: React.FC = () => {
       {!isReaderView && (
         <nav className="w-20 md:w-72 bg-white border-r border-slate-100 flex flex-col items-center md:items-stretch py-8 transition-all duration-300 z-50">
           <div className="px-6 mb-10 flex items-center gap-3">
-            <img src={Logo} alt="Collector" className="w-28 object-contain" />
+            <img src={Logo} alt="Collector" className="w-36 object-contain" />
           </div>
 
           <div className="flex-1 space-y-2 px-4 overflow-y-auto">
@@ -186,73 +211,72 @@ const App: React.FC = () => {
             />
             <NavItem
               icon={<NotebookPen size={22} />}
-              label="我的"
+              label="统计"
               active={currentView === View.LEARNING_DATA}
               onClick={() => setCurrentView(View.LEARNING_DATA)}
             />
           </div>
 
-          <div className="w-full px-4 space-y-4">
+          <div className="w-full px-4 space-y-4 mb-6">
             <button
               onClick={() => {
                 setSettingsTab('profile');
                 setCurrentView(View.SETTINGS);
               }}
-              className="w-full flex items-center gap-3 px-4 py-4 rounded-[18px] bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all"
+              className="w-full flex items-center gap-3 px-2 py-2 rounded-[18px] hover:bg-slate-50 text-slate-800 transition-all"
             >
-              <div className="w-12 h-12 rounded-2xl overflow-hidden bg-slate-200">
+              <div className="w-12 h-12 rounded-[20px] overflow-hidden bg-slate-200 shrink-0">
                 <img
-                  src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80"
+                  src="/avator.png"
                   alt="avatar"
                   className="w-full h-full object-cover"
                 />
               </div>
               <div className="hidden md:block text-left">
-                <p className="text-base font-bold text-slate-900">全糖可乐</p>
-                <p className="text-xs text-slate-500">点击进入个人中心</p>
+                <p className="text-base font-medium text-slate-900">全糖可乐</p>
               </div>
             </button>
 
-            <div className="bg-indigo-50/80 border border-indigo-100 rounded-[20px] p-4">
-              <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm mb-3">
-                <Flame size={16} /> 打卡送会员
+            <div 
+              onClick={() => setShowCheckInModal(true)}
+              className="hidden md:block bg-[#f3f0ff] border border-[#ebe6ff] rounded-[22px] p-4 shadow-[0_10px_30px_-18px_rgba(106,90,249,0.6)] cursor-pointer hover:scale-[1.02] transition-transform duration-300"
+            >
+              <div className="flex items-center gap-2 text-[#6a5af9] font-semibold text-sm mb-3">
+                <Flame size={16} className="fill-[#6a5af9] text-[#6a5af9]" />
+                <span>打卡送会员</span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
-                <span className="px-2 py-1 bg-white rounded-full font-bold text-indigo-600">本周</span>
-                <span>坚持阅读赢奖励</span>
-              </div>
-              <div className="flex items-center gap-2 justify-between">
-                {weekDays.map((day) => (
-                  <div key={day.label} className="flex flex-col items-center gap-1">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${
-                        day.done
-                          ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-white text-slate-500 border-indigo-100'
-                      } ${day.isToday ? 'ring-2 ring-indigo-200' : ''}`}
-                    >
-                      {day.label}
+              <div className="flex items-center justify-between gap-1.5">
+                {weekDays.map((day) => {
+                  const baseCircle = 'w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-200';
+                  
+                  if (day.isToday) {
+                    return (
+                      <div key={day.label} className="flex flex-col items-center">
+                        <div className={`${baseCircle} bg-white text-slate-900 border border-slate-900 ring-2 ring-[#6a5af9]/20`}>
+                          <div className="w-2 h-2 rounded-full bg-slate-900" />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (day.done) {
+                    return (
+                      <div key={day.label} className="flex flex-col items-center">
+                        <div className={`${baseCircle} bg-[#6a5af9] text-white shadow-sm shadow-[#6a5af9]/30`}>
+                          <Check size={14} strokeWidth={3} />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={day.label} className="flex flex-col items-center">
+                      <div className={`${baseCircle} bg-white/60 text-slate-400 border border-[#e5e5f0] shadow-sm`}>{day.label}</div>
                     </div>
-                    {day.done ? (
-                      <Check size={14} className="text-indigo-600" />
-                    ) : (
-                      <Circle size={12} className="text-indigo-200" />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
-
-            <button
-              onClick={() => {
-                setSettingsTab('profile');
-                setCurrentView(View.SETTINGS);
-              }}
-              className="w-full flex items-center gap-3 px-5 py-4 rounded-[20px] bg-white border border-slate-200 text-slate-800 hover:border-indigo-200 hover:shadow-sm transition-all"
-            >
-              <Settings size={20} />
-              <span className="hidden md:block text-sm font-semibold">个人中心 · 升级 PRO</span>
-            </button>
           </div>
         </nav>
       )}
@@ -261,6 +285,55 @@ const App: React.FC = () => {
       <main className="flex-1 overflow-y-auto relative bg-[#f8fafc]/30">
         {renderView()}
       </main>
+
+      {/* Check-in Modal */}
+      {showCheckInModal && (
+        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center animate-in fade-in duration-200 backdrop-blur-sm" onClick={(e) => { if(e.target === e.currentTarget) setShowCheckInModal(false); }}>
+          <div className="bg-white rounded-[24px] p-6 w-[auto] shadow-2xl animate-in zoom-in-95 duration-200 relative border border-slate-100">
+            <button 
+              onClick={() => setShowCheckInModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600"
+            >
+              <X size={20} />
+            </button>
+            <div className="mb-6 mr-10">
+              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <Flame className="text-[#6C57F0] fill-[#6C57F0]" size={24} />
+                本月打卡记录
+              </h3>
+              <p className="text-slate-500 text-sm mt-1 ml-8">坚持阅读输入，点亮更多方块</p>
+            </div>
+            
+            <div className="flex justify-center mb-2">
+               <div className="grid grid-rows-7 grid-flow-col gap-1.5">
+                  {contributionData.map((level, i) => (
+                    <div 
+                      key={i} 
+                      className={`w-4 h-4 rounded-[3px] transition-all hover:scale-125 ${
+                        level === 0 ? 'bg-slate-100' :
+                        level === 1 ? 'bg-[#6C57F0]/20' :
+                        level === 2 ? 'bg-[#6C57F0]/40' :
+                        level === 3 ? 'bg-[#6C57F0]/60' :
+                        level === 4 ? 'bg-[#6C57F0]/80' :
+                        'bg-[#6C57F0]'
+                      }`}
+                      title={`Contribution level: ${level}`}
+                    />
+                  ))}
+               </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-4 text-xs text-slate-400">
+              <span>Less</span>
+              <div className="flex gap-1">
+                <div className="w-3 h-3 rounded-[2px] bg-slate-100" />
+                <div className="w-3 h-3 rounded-[2px] bg-[#6C57F0]/40" />
+                <div className="w-3 h-3 rounded-[2px] bg-[#6C57F0]" />
+              </div>
+              <span>More</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
