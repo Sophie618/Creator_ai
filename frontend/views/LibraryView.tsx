@@ -80,9 +80,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
   ];
 
   const statusMap: Record<string, string> = {
-    'pending': '等待处理',
-    'parsed': '已解析',
-    'quiz_generated': '挑战已生成',
+    'pending': '等待阅读',
     'completed': '已读完'
   };
 
@@ -175,9 +173,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="appearance-none bg-white border border-slate-200 px-8 py-4 rounded-[24px] text-sm font-black text-slate-600 focus:outline-none focus:border-indigo-500 cursor-pointer pr-12 transition-all"
                   >
-                    <option>所有状态</option>
-                    <option>等待处理</option>
-                    <option>已解析</option>
+                    <option>等待阅读</option>
                     <option>已读完</option>
                   </select>
                   <Clock size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
