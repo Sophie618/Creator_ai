@@ -28,6 +28,19 @@ import { Article } from '../types';
 import { MOCK_ARTICLES } from '../data/mockData';
 import { GoogleGenAI } from "@google/genai";
 
+const FourPointStar = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="currentColor" 
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" />
+  </svg>
+);
+
 interface CollectedArticle {
   id: string;
   title: string;
@@ -131,7 +144,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
                     onClick={() => setShowAssistant(true)}
                     className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all animate-pulse"
                   >
-                    <BrainCircuit size={18} />
+                    <FourPointStar size={18} />
                   </button>
                 )}
               </h1>
@@ -353,7 +366,7 @@ const MindAssistant: React.FC<MindAssistantProps> = ({ articles, onClose }) => {
       <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-             <BrainCircuit size={20} />
+             <FourPointStar size={20} />
           </div>
           <div>
             <h3 className="font-black text-slate-900 text-sm">思维博弈助理</h3>

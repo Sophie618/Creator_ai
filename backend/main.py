@@ -102,7 +102,18 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
     if result is None:
          raise HTTPException(status_code=400, detail="Could not parse content from the page")
     
-    content = result.get('text')
+    # Handle both dict (older versions) and Document object (newer versions)
+    if isinstance(result, dict):
+        content = result.get('text')
+        title = result.get('title', '')
+        author = result.get('author', '')
+        cover_image = result.get('image')
+    else:
+        content = getattr(result, 'text', None)
+        title = getattr(result, 'title', '')
+        author = getattr(result, 'author', '')
+        cover_image = getattr(result, 'image', None)
+
     # 如果 bare_extraction 这里的 text 为空，尝试用 extract 单独提取一次作为后备
     if not content:
         content = trafilatura.extract(downloaded)
@@ -110,12 +121,28 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
     if not content:
          raise HTTPException(status_code=400, detail="Could not extract text content")
 
-    title = result.get('title', '')
-    # trafilatura 有时提取不到 author，这里设为空字符串
-    author = result.get('author', '')
-    
-    # trafilatura 'image' 字段通常是主图/封面图
-    cover_image = result.get('image', None)
+    # 增强封面图提取：如果你发现 trafilatura 提取的图片不准确，可以使用 BeautifulSoup 进行二次提取
+    # 尤其是针对微信公众号的懒加载图片 (data-src)
+    if not cover_image or "weixin" in url:
+        try:
+            soup = BeautifulSoup(downloaded, "html.parser")
+            
+            # 1. 优先尝试 og:image
+            og_image = soup.find("meta", property="og:image")
+            if og_image and og_image.get("content"):
+                cover_image = og_image.get("content").strip()
+            
+            # 2. 如果 og:image 也没有，或者是微信文章，尝试找正文第一张图片
+            if not cover_image:
+                 all_imgs = soup.find_all("img")
+                 for img in all_imgs:
+                     src = img.get("data-src") or img.get("src") or ""
+                     # 微信特征
+                     if "0?wx_fmt=" in src or "wx_fmt=" in src:
+                         cover_image = src
+                         break
+        except Exception as e:
+            print(f"Secondary image extraction failed: {e}")
 
     return content, title, cover_image, author
 

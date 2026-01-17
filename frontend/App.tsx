@@ -205,7 +205,7 @@ const App: React.FC = () => {
             />
             <NavItem
               icon={<Library size={22} />}
-              label="收藏"
+              label="收录"
               active={currentView === View.LIBRARY}
               onClick={() => setCurrentView(View.LIBRARY)}
             />
