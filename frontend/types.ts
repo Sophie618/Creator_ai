@@ -57,6 +57,7 @@ export interface SingleQuiz {
   jump_url: string;
   source_title?: string;
   source_logo?: string;
+  source_cover?: string;
 }
 
 export interface QuizListResponse {

@@ -1,11 +1,12 @@
 import os
 import json
 import requests
+import trafilatura
 from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 from datetime import datetime
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
@@ -40,6 +41,7 @@ class SingleQuiz(BaseModel):
     jump_url: str
     source_title: Optional[str] = None
     source_logo: Optional[str] = None
+    source_cover: Optional[str] = None
 
 class QuizListResponse(BaseModel):
     items: List[SingleQuiz]
@@ -58,56 +60,64 @@ class CollectedArticle(BaseModel):
 class ArticleListResponse(BaseModel):
     articles: List[CollectedArticle]
 
+@app.get("/proxy-image")
+def proxy_image(url: str):
+    """
+    Proxy endpoint to fetch images with CORS headers enabled for frontend canvas manipulation.
+    """
+    try:
+        # User-Agent header is often required by servers to return the image
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        
+        # Determine media type
+        content_type = resp.headers.get("Content-Type", "image/jpeg")
+        
+        # Return content directly
+        return Response(content=resp.content, media_type=content_type)
+    except Exception as e:
+        print(f"Proxy error for {url}: {e}")
+        # Return a 404 or generic error image if needed, for now 404
+        raise HTTPException(status_code=404, detail="Image not found or blocked")
+
 @app.get("/")
 def read_root():
     return {"message": "Hello AGI"}
 
-def fetch_article_content(url: str) -> Tuple[str, str, Optional[str]]:
-    """抓取文章内容、标题和封面图"""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {str(e)}")
-
-    soup = BeautifulSoup(response.content, "html.parser")
-
-    # 优先提取微信公众号内容
-    content_element = soup.find(id="js_content")
+def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[str]]:
+    """抓取文章内容、标题、封面图和作者"""
+    # 使用 trafilatura.fetch_url 获取网页
+    downloaded = trafilatura.fetch_url(url)
     
-    # 如果没有找到特定容器，回退到 body
-    if not content_element:
-        content_element = soup.body
+    if downloaded is None:
+        raise HTTPException(status_code=400, detail="Failed to fetch URL")
 
-    if not content_element:
+    # 使用 bare_extraction 提取文本和元数据 (title, author, image)
+    # 这会输出纯文本格式，保留段落结构，符合要求
+    result = trafilatura.bare_extraction(downloaded)
+    
+    if result is None:
          raise HTTPException(status_code=400, detail="Could not parse content from the page")
+    
+    content = result.get('text')
+    # 如果 bare_extraction 这里的 text 为空，尝试用 extract 单独提取一次作为后备
+    if not content:
+        content = trafilatura.extract(downloaded)
 
-    # 抓取标题：优先 og:title，再回退到 <title>
-    title = ""
-    og_title = soup.find("meta", property="og:title")
-    if og_title and og_title.get("content"):
-        title = og_title.get("content", "").strip()
-    elif soup.title and soup.title.string:
-        title = soup.title.string.strip()
+    if not content:
+         raise HTTPException(status_code=400, detail="Could not extract text content")
 
-    # 抓取封面图：优先 og:image，或第一张包含 "0?wx_fmt=" 的微信图片
-    cover_image = None
-    og_image = soup.find("meta", property="og:image")
-    if og_image and og_image.get("content"):
-        cover_image = og_image.get("content", "").strip()
-    else:
-        # 查找所有图片，寻找微信公众号首图
-        all_imgs = soup.find_all("img")
-        for img in all_imgs:
-            src = img.get("data-src") or img.get("src") or ""
-            if "0?wx_fmt=" in src or "wx_fmt=" in src:
-                cover_image = src
-                break
+    title = result.get('title', '')
+    # trafilatura 有时提取不到 author，这里设为空字符串
+    author = result.get('author', '')
+    
+    # trafilatura 'image' 字段通常是主图/封面图
+    cover_image = result.get('image', None)
 
-    return content_element.get_text(separator="\n", strip=True), title, cover_image
+    return content, title, cover_image, author
 
 def generate_quiz_from_text(text: str) -> dict:
     api_key = os.getenv("MINIMAX_API_KEY")
@@ -170,8 +180,8 @@ Output JSON 格式（不要Markdown标记，仅返回JSON字符串）:
 
 @app.post("/api/generate-quiz", response_model=QuizListResponse)
 def generate_quiz_endpoint(request: QuizRequest):
-    # 1. 抓取文章内容、标题和封面图
-    full_content, page_title, cover_image = fetch_article_content(request.url)
+    # 1. 抓取文章内容、标题、封面图和作者
+    full_content, page_title, cover_image, author = fetch_article_content(request.url)
     
     # 2. 截取前 6000 字符 (避免超出上下文限制)
     truncated_content = full_content[:6000]
@@ -209,7 +219,8 @@ def generate_quiz_endpoint(request: QuizRequest):
             evidence=q.get("evidence", ""),
             jump_url=request.url,
             source_title=page_title,
-            source_logo=source_logo
+            source_logo=source_logo,
+            source_cover=cover_image
         ))
     
     # 5. 保存文章到收录列表（避免重复）

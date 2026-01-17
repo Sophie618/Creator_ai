@@ -194,12 +194,14 @@ function Frame1({  }: Frame1Props) {
   return (
     <div className="relative shrink-0 w-full">
       <div className="flex flex-row items-center size-full">
-        <div className="content-stretch flex gap-[10px] items-center p-[20px] relative w-full">
-          <div className="bg-[#f4f4f4] rounded-[5px] shrink-0 size-[35px] flex items-center justify-center overflow-hidden">
-             {/* QR Code Placeholder */}
-             <div className="w-full h-full bg-slate-200"></div>
+        <div className="flex items-center justify-between p-[20px] relative w-full">
+          <div className="flex items-center gap-[10px]">
+            <div className="bg-[#f4f4f4] rounded-[5px] shrink-0 size-[35px] flex items-center justify-center overflow-hidden">
+              {/* QR Code Placeholder */}
+              <div className="w-full h-full bg-slate-200"></div>
+            </div>
+            <p className="font-['PingFang_SC:Regular',sans-serif] leading-[normal] not-italic relative text-[13px] text-black">扫码阅读</p>
           </div>
-          <p className="flex-[1_0_0] font-['PingFang_SC:Regular',sans-serif] leading-[normal] min-h-px min-w-px not-italic relative text-[13px] text-black">扫码阅读</p>
           <Frame5 />
         </div>
       </div>
@@ -222,18 +224,26 @@ export default function ShareCard({ onClose, title, defaultCover, qrCodeUrl }: S
   });
   const cardRef = useRef<HTMLDivElement>(null);
 
+  // Construct proxy URL for the default cover to avoid CORS issues
+  const proxyCoverUrl = React.useMemo(() => {
+    if (!defaultCover) return undefined;
+    if (defaultCover.startsWith('data:') || defaultCover.startsWith('/')) return defaultCover;
+    return `http://127.0.0.1:8000/proxy-image?url=${encodeURIComponent(defaultCover)}`;
+  }, [defaultCover]);
+
   // If a default cover is provided (and no user upload), extract colors from it
   useEffect(() => {
-    if (defaultCover && !uploadedImage) {
+    const targetImage = uploadedImage || proxyCoverUrl;
+    if (targetImage) {
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => {
         const colors = extractColorsFromImage(img);
         setGradientColors(colors);
       };
-      img.src = defaultCover;
+      img.src = targetImage;
     }
-  }, [defaultCover, uploadedImage]);
+  }, [proxyCoverUrl, uploadedImage]);
   
   const handleImageUpload = (file: File) => {
     const reader = new FileReader();
@@ -292,7 +302,7 @@ export default function ShareCard({ onClose, title, defaultCover, qrCodeUrl }: S
             onImageUpload={handleImageUpload}
             gradientColors={gradientColors}
             title={title}
-            defaultCover={defaultCover}
+            defaultCover={proxyCoverUrl}
           />
           <Frame1 qrCodeUrl={qrCodeUrl} />
         </div>

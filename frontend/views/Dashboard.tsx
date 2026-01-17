@@ -86,6 +86,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 jumpUrl={quizData[currentQuestionIndex].jump_url || inputValue}
                 sourceTitle={quizData[currentQuestionIndex].source_title}
                 sourceLogo={quizData[currentQuestionIndex].source_logo}
+                sourceCover={quizData[currentQuestionIndex].source_cover}
               onNext={onNext}
               isLast={currentQuestionIndex === quizData.length - 1}
             />

@@ -10,6 +10,7 @@ interface QuizCardProps {
   jumpUrl: string;
   sourceTitle?: string;
   sourceLogo?: string;
+  sourceCover?: string;
   onNext: () => void;
   isLast?: boolean;
 }
@@ -21,6 +22,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
   jumpUrl, 
   sourceTitle,
   sourceLogo,
+  sourceCover,
   onNext, 
   isLast = false 
 }) => {
@@ -173,6 +175,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
       <ShareCard 
         onClose={() => setShowShareModal(false)} 
         title={question}
+        defaultCover={sourceCover}
       />
     )}
     </>
