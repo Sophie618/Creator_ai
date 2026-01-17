@@ -192,7 +192,7 @@ const App: React.FC = () => {
       {/* Sidebar Navigation */}
       {!isReaderView && (
         <nav className="w-20 md:w-72 bg-white border-r border-slate-100 flex flex-col items-center md:items-stretch py-8 transition-all duration-300 z-50">
-          <div className="px-6 mb-10 flex items-center gap-3">
+          <div className="px-6 mb-7 flex items-center gap-3">
             <img src={Logo} alt="Collector" className="w-36 object-contain" />
           </div>
 
@@ -217,7 +217,7 @@ const App: React.FC = () => {
             />
           </div>
 
-          <div className="w-full px-4 space-y-4 mb-6">
+          <div className="w-full px-4 space-y-4 ">
             <button
               onClick={() => {
                 setSettingsTab('profile');

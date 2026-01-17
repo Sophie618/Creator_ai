@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Quote, ArrowRight, ExternalLink, Share2, Link as LinkIcon } from 'lucide-react';
+import ShareCard from './ShareCard';
 
 interface QuizCardProps {
   question: string;
@@ -25,6 +26,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
 }) => {
   const [hasAnswered, setHasAnswered] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const sourceMeta = useMemo(() => {
     const lowerUrl = (jumpUrl || '').toLowerCase();
@@ -65,20 +67,12 @@ const QuizCard: React.FC<QuizCardProps> = ({
     setHasAnswered(true);
   };
 
-  const handleShare = async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: '阅读原文', url: jumpUrl });
-      } else {
-        await navigator.clipboard.writeText(jumpUrl);
-        alert('链接已复制到剪贴板');
-      }
-    } catch (e) {
-      console.error(e);
-    }
+  const handleShare = () => {
+    setShowShareModal(true);
   };
 
   return (
+    <>
     <div className="w-full max-w-[900px] mx-auto perspective-1000">
       <div className={`relative w-full min-h-[320px] flip-card-inner preserve-3d ${hasAnswered ? 'rotate-y-180' : ''}`}>
         {/* Front: Question & Options */}
@@ -174,7 +168,16 @@ const QuizCard: React.FC<QuizCardProps> = ({
         </div>
       </div>
     </div>
+    
+    {showShareModal && (
+      <ShareCard 
+        onClose={() => setShowShareModal(false)} 
+        title={question}
+      />
+    )}
+    </>
   );
 };
 
 export default QuizCard;
+  
