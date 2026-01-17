@@ -227,6 +227,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
                     src={article.coverImage || article.cover_image || '/hero.png'}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                     alt={article.title}
+                    referrerPolicy="no-referrer"
                     onError={(e) => { e.currentTarget.src = '/hero.png'; }}
                   />
                   <div className="absolute top-4 left-4">
