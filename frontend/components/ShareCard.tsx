@@ -98,7 +98,7 @@ function Frame2({ gradientColors, title }: Frame2Props) {
       }}
     >
       <Frame4 />
-      <p className="font-['PingFang_SC:Medium',sans-serif] leading-[normal] min-w-full not-italic relative shrink-0 text-[20px] text-black w-[min-content]">
+      <p className="font-serif font-medium leading-[normal] min-w-full not-italic relative shrink-0 text-[19px] text-black w-[min-content] tracking-wide">
         {title || "中美AI差距，根本没在缩小……"}
       </p>
     </div>

@@ -247,13 +247,13 @@ const App: React.FC = () => {
               </div>
               <div className="flex items-center justify-between gap-1.5">
                 {weekDays.map((day) => {
-                  const baseCircle = 'w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-200';
+                  const baseCircle = 'w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-200';
                   
                   if (day.isToday) {
                     return (
                       <div key={day.label} className="flex flex-col items-center">
-                        <div className={`${baseCircle} bg-white text-slate-900 border border-slate-900 ring-2 ring-[#6a5af9]/20`}>
-                          <div className="w-2 h-2 rounded-full bg-slate-900" />
+                        <div className={`${baseCircle} bg-white text-slate-900 border border-slate-600 ring-2 ring-[#6a5af9]/20`}>
+                          <div className="w-2 h-2 rounded-full bg-slate-500" />
                         </div>
                       </div>
                     );
