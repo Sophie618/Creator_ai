@@ -1,0 +1,7 @@
+{
+  "name": "Read AI - Gamified Reading ",
+  "description": "A gamified reading platform that turns passive reading into an active game experience using AI-generated quizzes to unlock content fragments, complete with knowledge card management and AI podcast generation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
