@@ -178,7 +178,6 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
                     <option>所有状态</option>
                     <option>等待处理</option>
                     <option>已解析</option>
-                    <option>挑战已生成</option>
                     <option>已读完</option>
                   </select>
                   <Clock size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -259,20 +258,9 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
                     </div>
                   </div>
                   
-                  <h3 className={`font-black text-slate-900 mb-6 group-hover:text-indigo-600 transition-colors leading-tight ${viewMode === 'grid' ? 'text-xl line-clamp-2' : 'text-2xl'}`}>
+                  <h3 className={`font-black text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight ${viewMode === 'grid' ? 'text-xl line-clamp-2' : 'text-2xl'}`}>
                     {article.title}
                   </h3>
-                  
-                  <div className="flex items-center justify-between mt-auto pt-6 border-t border-slate-50">
-                    <div className="flex-1 max-w-[120px] h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${article.progress}%` }} />
-                    </div>
-                    <span className={`text-[10px] font-black px-3 py-1 rounded-lg uppercase tracking-widest ${
-                      article.status === 'completed' ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400 bg-slate-50'
-                    }`}>
-                      {statusMap[article.status]}
-                    </span>
-                  </div>
                 </div>
               </div>
             ))}

@@ -8,6 +8,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -18,8 +19,12 @@ from contextlib import contextmanager
 # 加载环境变量
 load_dotenv()
 
-# SQLite 数据库初始化
-DB_PATH = "collector.db"
+# SQLite 数据库初始化 - 支持 ModelScope 持久化目录
+PERSISTENT_PATH = "/mnt/workspace"
+if os.path.exists(PERSISTENT_PATH):
+    DB_PATH = os.path.join(PERSISTENT_PATH, "collector.db")
+else:
+    DB_PATH = "collector.db"
 
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
@@ -419,3 +424,21 @@ def get_single_article(article_id: str):
         if not row:
             raise HTTPException(status_code=404, detail="Article not found")
         return CollectedArticle(**dict(row))
+
+# 挂载前端静态文件 (用于部署)
+# 只有当 dist 目录存在时才挂载，确保本地开发时不会报错
+frontend_dist = os.path.join(os.path.dirname(__file__), "../frontend/dist")
+if os.path.exists(frontend_dist):
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+    
+    # 捕获所有 404 并返回 index.html (React Router 支持)
+    @app.exception_handler(404)
+    async def custom_404_handler(request, __):
+        if not request.url.path.startswith("/api") and not request.url.path.startswith("/proxy-image"):
+            try:
+                with open(os.path.join(frontend_dist, "index.html"), "r", encoding="utf-8") as f:
+                    return Response(content=f.read(), media_type="text/html")
+            except Exception:
+                pass
+        return Response(content="Not Found", status_code=404)
+

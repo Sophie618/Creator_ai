@@ -247,7 +247,11 @@ export default function ShareCard({ onClose, title, defaultCover, qrCodeUrl }: S
     if (!defaultCover) return undefined;
     if (defaultCover.startsWith('data:') || defaultCover.startsWith('/')) return defaultCover;
     
-    // We assume backend is on port 8000 based on previous implementation
+    // In production (ModelScope), use relative path. In dev, use port 8000
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return `/proxy-image?url=${encodeURIComponent(defaultCover)}`;
+    }
+    
     const host = window.location.hostname || '127.0.0.1';
     return `http://${host}:8000/proxy-image?url=${encodeURIComponent(defaultCover)}`;
   }, [defaultCover]);
