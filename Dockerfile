@@ -1,49 +1,39 @@
-# ==========================================
-# 创空间部署 Dockerfile (前后端整合)
-# ==========================================
+# Use an official Python runtime as a parent image
+FROM python:3.10-slim
 
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# ============ 安装系统依赖 ============
+# Install system dependencies
+# curl: for installing Node.js
+# git: often needed for pip installing from git
 RUN apt-get update && apt-get install -y \
-    gcc \
     curl \
-    nginx \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# ============ 后端配置 ============
-# 复制并安装 Python 依赖
-COPY backend/requirements.txt /app/backend/
-RUN pip install --no-cache-dir -r /app/backend/requirements.txt
+# Install Node.js 18
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs
 
-# 复制后端代码
-COPY backend /app/backend
-
-# ============ 前端构建 ============
-# 复制前端代码并构建
-COPY frontend /app/frontend
-WORKDIR /app/frontend
-RUN npm ci && npm run build
-
-# ============ Nginx 配置 ============
-# 复制构建产物到 Nginx 目录
-RUN rm -rf /usr/share/nginx/html/* && \
-    cp -r /app/frontend/dist/* /usr/share/nginx/html/
-
-# 复制 Nginx 配置文件
-COPY nginx.studio.conf /etc/nginx/sites-available/default
-
-# ============ 启动脚本 ============
+# Set the working directory to /app
 WORKDIR /app
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
 
-# ============ 暴露端口 ============
+# Copy the current directory contents into the container at /app
+COPY . /app
+
+# --- Frontend Build ---
+WORKDIR /app/frontend
+# Install dependencies
+RUN npm install
+# Build the frontend (Output: /app/frontend/dist)
+RUN npm run build
+
+# --- Backend Setup ---
+WORKDIR /app/backend
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Expose port 7860
 EXPOSE 7860
 
-# ============ 启动命令 ============
-CMD ["/app/start.sh"]
+# Run the FastAPI app
+# --proxy-headers is important if ModelScope uses a reverse proxy
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--proxy-headers"]

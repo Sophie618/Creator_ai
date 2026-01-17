@@ -75,20 +75,7 @@ const KnowledgeBase: React.FC = () => {
           <p className="text-slate-500 font-medium">已同步 256 个思维切片，它们正潜伏在你的直觉中。</p>
         </div>
         
-        <div className="flex bg-slate-100 p-1 rounded-2xl">
-          <button 
-            onClick={() => setViewMode('gallery')}
-            className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${viewMode === 'gallery' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
-          >
-            沉浸画廊
-          </button>
-          <button 
-            onClick={() => setViewMode('grid')}
-            className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
-          >
-            全量矩阵
-          </button>
-        </div>
+        
       </header>
 
       {viewMode === 'gallery' ? (

@@ -22,7 +22,8 @@ import {
   Loader2,
   Volume2,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from 'lucide-react';
 import { Article } from '../types';
 import { MOCK_ARTICLES } from '../data/mockData';
@@ -73,9 +74,10 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
 
   const categories = [
     { name: '全部', icon: <LayoutGrid size={14} />, color: 'bg-slate-100 text-slate-600' },
-    { name: '公众号', icon: <MessageCircle size={14} />, color: 'bg-emerald-50 text-emerald-600', sourceKey: '公众号' },
-    { name: '小红书', icon: <Hash size={14} />, color: 'bg-rose-50 text-rose-600', sourceKey: '小红书' },
-    { name: '哔哩哔哩', icon: <BookOpen size={14} />, color: 'bg-indigo-50 text-indigo-600', sourceKey: '哔哩哔哩' },
+      { name: '公众号', icon: <MessageCircle size={14} />, color: 'bg-emerald-50 text-emerald-600', sourceKey: '公众号' },
+      { name: '哔哩哔哩', icon: <BookOpen size={14} />, color: 'bg-indigo-50 text-indigo-600', sourceKey: '哔哩哔哩' },
+    { name: ' YouTube', icon: <Hash size={14} />, color: 'bg-rose-50 text-rose-600', sourceKey: 'YouTube' },
+    
     
   ];
 
@@ -84,30 +86,49 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
     'completed': '已读完'
   };
 
+  const fetchCollectedArticles = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('http://127.0.0.1:8000/api/collected-articles');
+      if (response.ok) {
+        const data = await response.json();
+        const normalized = (data.articles || []).map((a: CollectedArticle) => ({
+          ...a,
+          coverImage: a.cover_image,
+          wordCount: a.word_count,
+          estimatedTime: a.estimated_time,
+          createdAt: a.created_at,
+          progress: a.status === 'completed' ? 100 : 60
+        }));
+        setCollectedArticles(normalized);
+      }
+    } catch (error) {
+      console.error('Failed to fetch collected articles:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteArticle = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm('确定要删除这篇文章吗？')) return;
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/article/${id}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        fetchCollectedArticles();
+      } else {
+        alert('删除失败');
+      }
+    } catch (error) {
+      console.error('Delete article failed:', error);
+      alert('删除失败，请检查网络连接');
+    }
+  };
+
   // 从后端获取收录文章
   useEffect(() => {
-    const fetchCollectedArticles = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch('http://127.0.0.1:8000/api/collected-articles');
-        if (response.ok) {
-          const data = await response.json();
-          const normalized = (data.articles || []).map((a: CollectedArticle) => ({
-            ...a,
-            coverImage: a.cover_image,
-            wordCount: a.word_count,
-            estimatedTime: a.estimated_time,
-            createdAt: a.created_at,
-            progress: a.status === 'completed' ? 100 : 60
-          }));
-          setCollectedArticles(normalized);
-        }
-      } catch (error) {
-        console.error('Failed to fetch collected articles:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchCollectedArticles();
   }, []);
 
@@ -148,9 +169,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
               </h1>
               <p className="text-slate-500 font-medium">智能识别并分类你的全平台思维触角。</p>
             </div>
-            <button className="bg-slate-900 hover:bg-black text-white font-black px-8 py-4 rounded-[22px] flex items-center gap-3 shadow-xl shadow-slate-200 transition-all active:scale-95 self-start">
-              <Plus size={20} /> 添加新维度
-            </button>
+            
           </header>
 
           {/* Tools & Tabs */}
@@ -211,7 +230,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
                   <span>{cat.icon}</span>
                   {cat.name}
                   <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeCategory === cat.name ? 'bg-white/20' : 'bg-slate-100 text-slate-400'}`}>
-                    {cat.name === '全部' ? articles.length : articles.filter(a => (activeCategory === '公众号' ? a.source === 'Medium' : a.source === cat.sourceKey)).length}
+                    {cat.name === '全部' ? collectedArticles.length : collectedArticles.filter(a => a.source === cat.sourceKey).length}
                   </span>
                 </button>
               ))}
@@ -242,6 +261,14 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
                     <span className="px-3 py-1 bg-white/90 backdrop-blur rounded-full text-[10px] font-black uppercase text-indigo-600 shadow-sm">
                       {article.source}
                     </span>
+                  </div>
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={(e) => handleDeleteArticle(e, article.id)}
+                      className="p-2 bg-white/90 backdrop-blur rounded-full text-slate-400 hover:text-rose-500 hover:bg-rose-50 shadow-sm transition-all"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
 

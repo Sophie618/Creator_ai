@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import requests
 import trafilatura
@@ -133,13 +134,156 @@ def proxy_image(url: str):
         # Return a 404 or generic error image if needed, for now 404
         raise HTTPException(status_code=404, detail="Image not found or blocked")
 
-@app.get("/")
+@app.get("/api/health")
 def read_root():
     return {"message": "Hello AGI"}
+
+def extract_bvid(url: str) -> Optional[str]:
+    """从 URL 中提取 B 站视频 ID (BV号)"""
+    bv_regex = r"BV[a-zA-Z0-9]{10}"
+    match = re.search(bv_regex, url)
+    return match.group(0) if match else None
+
+def fetch_bilibili_subtitles(bvid: str) -> Tuple[str, str, Optional[str], str]:
+    """获取 B 站视频标题、完整字幕文本、封面图和作者 (对齐 FitSnap 高级逻辑 - 修正 SESSDATA)"""
+    # 移除 Referer 以完全匹配 FitSnap 的 Header 策略
+    # 确保 SESSDATA 没有多余空格
+    sessdata = os.getenv("BILIBILI_SESSDATA", "").strip()
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+    if sessdata:
+        headers["Cookie"] = f"SESSDATA={sessdata}"
+    
+    try:
+        # 1. 获取视频基本信息
+        view_url = f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}"
+        resp = requests.get(view_url, headers=headers, timeout=10)
+        view_data = resp.json()
+        
+        if view_data.get("code") != 0:
+             # 有时 View 接口也需要 Referer? 如果失败再打印
+            print(f"[Bilibili] View API Failed: {view_data}")
+            return f"获取视频信息失败: {view_data.get('message')}", "Bilibili 视频", None, "Bilibili"
+        
+        data = view_data.get("data") or {}
+        title = data.get("title", "未命名视频")
+        desc = data.get("desc", "")
+        # B站图片有时是 http，强制转 https
+        pic = data.get("pic", "").replace("http:", "https:")
+        aid = data.get("aid")
+        cid = data.get("cid")
+        author = data.get("owner", {}).get("name", "Bilibili UP主")
+        
+        # 2. 获取字幕列表
+        subtitles = []
+        
+        # 路径 A: 请求 Player V2 接口 (完全对齐 FitSnap)
+        player_url = f"https://api.bilibili.com/x/player/v2?aid={aid}&cid={cid}&bvid={bvid}"
+        p_resp = requests.get(player_url, headers=headers, timeout=10)
+        p_json = p_resp.json()
+        p_data = p_json.get("data", {})
+        p_subtitle_obj = p_data.get("subtitle", {})
+        
+        # 3.1 提取字幕策略 (对齐 FitSnap: subtitles -> ai_subtitle -> view.subtitle)
+        subtitles = p_subtitle_obj.get("subtitles", []) or []
+        
+        if not subtitles:
+            # 兼容 Python 处理逻辑：如果是 dict 放入 list
+            ai_subs = p_subtitle_obj.get("ai_subtitle")
+            if ai_subs:
+                if isinstance(ai_subs, list):
+                    subtitles = ai_subs
+                else:
+                    subtitles = [ai_subs]
+            # 如果 AI 字幕也没有，检查 View Data
+            elif data.get("subtitle", {}).get("list"):
+                subtitles = data.get("subtitle", {}).get("list", [])
+        
+        # 3.2 双重检查 View Data (FitSnap 逻辑)
+        if not subtitles and data.get("subtitle", {}).get("list"):
+             subtitles = data.get("subtitle", {}).get("list", [])
+
+        print(f"[Bilibili] Found {len(subtitles)} subtitle tracks for {bvid}")
+        
+        # 调试：如果有字幕，打印一下第一条的语言，确认解析正确
+        if subtitles:
+             print(f"[Bilibili] First track language: {subtitles[0].get('lan')} (is_ai: {subtitles[0].get('is_ai')})")
+
+        # 3. 选择最佳音轨 (优先中文, 非 AI)
+        subtitle_url = None
+        if subtitles:
+            # FitSnap 逻辑：找 zh-CN 且非 AI，或者 zh-Hans 且非 AI，否则第一个
+            best_track = None
+            
+            # 尝试 1: zh-CN & !is_ai
+            for s in subtitles:
+                if s.get("lan") == "zh-CN" and not s.get("is_ai", False):
+                    best_track = s; break
+            
+            # 尝试 2: zh-Hans & !is_ai
+            if not best_track:
+                for s in subtitles:
+                    if s.get("lan") == "zh-Hans" and not s.get("is_ai", False):
+                        best_track = s; break
+                        
+            # 尝试 3: 任何中文
+            if not best_track: 
+                 for s in subtitles:
+                    if "zh" in s.get("lan", ""):
+                        best_track = s; break
+            
+            # 尝试 4: 默认第一个
+            if not best_track:
+                best_track = subtitles[0]
+                
+            subtitle_url = best_track.get("subtitle_url") or best_track.get("url")
+
+        # 4. 如果有字幕，下载并解析
+        if subtitle_url:
+            if subtitle_url.startswith("//"):
+                subtitle_url = f"https:{subtitle_url}"
+                
+            sub_resp = requests.get(subtitle_url, headers=headers, timeout=10)
+            sub_content = sub_resp.json()
+            body = sub_content.get("body", []) if isinstance(sub_content, dict) else sub_content
+            
+            if body:
+                full_text = "".join([item.get("content", "") for item in body])
+                if len(full_text) > 20: 
+                    print(f"[Bilibili] Successfully extracted {len(full_text)} chars from {bvid}")
+                    return full_text, title, pic, author
+
+        # 5. 兜底策略
+        print(f"[Bilibili] No valid subtitles found for {bvid}, using description fallback.")
+        tags_text = ""
+        try:
+            tags_url = f"https://api.bilibili.com/x/tag/archive/tags?bvid={bvid}"
+            t_resp = requests.get(tags_url, headers=headers, timeout=5)
+            tags_data = t_resp.json().get("data", [])
+            if tags_data:
+                tags_text = "视频标签: " + ", ".join([t.get("tag_name", "") for t in tags_data])
+        except: pass
+
+        combined_context = f"视频标题: {title}\n视频简介: {desc}\n{tags_text}"
+        return f"[由于接口限制未能提取字幕，基于简介生成]\n\n{combined_context}", title, pic, author
+
+        
+    except Exception as e:
+        print(f"[Bilibili] Error: {e}")
+        if isinstance(e, HTTPException): raise e
+        return f"解析失败: {str(e)}", "Bilibili 视频", None, "Bilibili"
 
 def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[str]]:
     """抓取文章内容、标题、封面图和作者"""
     
+    # 0. 优先处理 Bilibili 链接
+    bvid = extract_bvid(url)
+    if bvid:
+        return fetch_bilibili_subtitles(bvid)
+
     # 1. 使用 requests 获取网页源码 (更好地模拟浏览器，通过 headers 发送 User-Agent)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -236,32 +380,55 @@ def generate_quiz_from_text(text: str) -> dict:
         base_url="https://api.minimax.chat/v1"
     )
 
-    system_prompt = """你是一个专业的长文排版和认知提取专家。
-任务：
-1. 阅读文章，找到 **3个** 有明显区别、反直觉、有争议或颠覆性的观点或数据。
-2. 将每个观点转化为一个以“你认为”开头的封闭式二元竞猜题（Bet）。
-3. 选项严格固定为 ["是", "否"]。
-4. 必须从原文中摘录一段完全一致、未经修改（包括标点符号）的句子作为证据 (evidence)。
-5. **文章清洗**：去除原文开头的“编辑：xxx”、“作者：xxx”、“来源：xxx”以及文末的版权声明、点赞关注引导等无关正文的噪音。直接从真正的正文第一句开始。
-6. **分段保留**：在返回的 `cleaned_content` 中，**必须**使用两个换行符 `\n\n` 来明确分隔不同的段落，确保排版清晰。即使原文的分段不明显，你也应该根据语义进行合理的分段，每段文字不宜过长。
+    system_prompt = """你是一个专业的认知科学家和长文排版专家。你的任务是提取输入内容的核心认知价值，并将其转化为深度阅读体验。
 
-注意：
-- 返回结果只能是纯 JSON 字符串，不能包含 Markdown 格式标记。
-- 如果文章开头有关于作者或来源的简短介绍（属于文章背景信息），可以保留；但行政类的元数据（如“记者 姚顺雨 报道”）必须剔除。
-- 确保首段是引人入胜的正文开始，以便我们进行“首字放大”设计。
-- **特别重要**：对于 `cleaned_content` 字段，请确保输出为标准的 JSON 字符串。如果正文包含引号，请务必转义为 `\"`。所有的换行符必须对应 JSON 中的 `\\n`（在 Python 字符串中即 \n）。不要直接在 JSON 字符串里换行。
+### 第一阶段：内容深度重构 (Content Reconstruction)
+1. **识别特征**：判断输入是结构化文章、碎片化视频脚本还是简介。
+2. **语义重组**：如果是视频字幕/转录稿或视频简介（通常缺乏标点符号、口语化严重），必须通过 AGI 能力将其转换为“书面深度报道”风格。
+   - 补齐所有标点符号。
+   - 移除口头禅、重复叙述。
+   - 逻辑归类：将发散的碎碎念整合为严谨的段落。
+3. **排版约束**：
+   - 使用 `\n\n` 明确分段，每段 200-400 字。
+   - 严禁包含“编辑、来源、关注点赞”等噪音。
+   - 确保首段直接进入核心论点，以支撑“首字放大”排版。
 
-Output JSON 格式示例:
+### 第二阶段：预测市场问题设计 (Prediction Market Question Engineering)
+1. **提取核心**：必须找到并输出 **3个** 有明显区别、反直觉、有争议或颠覆性的观点或数据。即使内容较短，也要从逻辑推导或核心主张中挖掘出 3 个问题。
+2. **外部视角重构**：设想读者完全没读过原文，问题必须自洽：
+   - 严禁代词：禁止出现“作者、文章里、他、这个数据”等模糊指代，必须改为具体称呼或专有名词。
+   - 二元极性：问句必须是强冲突的，能够引诱用户进行“对赌”思考。
+   - 平滑自然：转变“你认为”之后的问句组织形式，使得问句通顺且有二元性。
+3. **证据提取**：摘录必须与原文一字不差（可以微调标点以符合语境，但核心语义必须一致），作为对赌判定的真实依据。
+
+### 第三阶段：输出约束
+- **格式**：严禁 Markdown 代码块，必须是纯 JSON，选项固定为 ["是", "否"]。
+- **数量**：必须不多不少返回 3 个问题。
+- **换行处理**：在 JSON 字符串内，换行符请直接使用 `\n\n`。请确保生成的 JSON 即使包含这些换行符也是有效的转义字符串。
+
+Output JSON 示例:
 {
   "questions": [
     {
-      "question": "你认为...?",
+      "question": "你认为...?", 
+      "options": ["是", "否"],
+      "correct_answer": "是",
+      "evidence": "原文句子..."
+    },
+    {
+      "question": "你认为...?", 
+      "options": ["是", "否"],
+      "correct_answer": "是",
+      "evidence": "原文句子..."
+    },
+    {
+      "question": "你认为...?", 
       "options": ["是", "否"],
       "correct_answer": "是",
       "evidence": "原文句子..."
     }
   ],
-  "cleaned_content": "这是清洗后的正文第一段...\n\n这是第二段..."
+  "cleaned_content": "重构后的正文第一段...\\n\\n第二段..."
 }"""
 
     try:
@@ -269,34 +436,48 @@ Output JSON 格式示例:
             model="abab6.5s-chat",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"文章内容如下：\n\n{text}"}
+                {"role": "user", "content": f"输入内容（可能是文章或视频字幕）如下：\n\n{text}"}
             ],
             temperature=0.1,
-            max_tokens=3000
+            max_tokens=3500
         )
         
         content = completion.choices[0].message.content
-        # 1. 尝试找到 JSON 的边界 {}
-        import re
-        json_match = re.search(r'(\{.*\})', content, re.DOTALL)
+        
+        # 提取 JSON 部分
+        json_text = ""
+        # 尝试匹配第一个 { 到最后一个 } 之间的内容
+        json_match = re.search(r'\{.*\}', content, re.DOTALL)
         if json_match:
-            cleaned_content = json_match.group(1)
+            json_text = json_match.group(0)
         else:
-            cleaned_content = content.replace("```json", "").replace("```", "").strip()
+            # 备选方案：清理 Markdown 标记
+            json_text = content.replace("```json", "").replace("```", "").strip()
         
         try:
-            # 使用 strict=False 处理可能的未转义控制字符 (如换行)
-            return json.loads(cleaned_content, strict=False)
-        except json.JSONDecodeError as je:
-            # 最后的尝试：清理可能破坏 JSON 的换行
+            # 1. 尝试标准解析
+            return json.loads(json_text)
+        except json.JSONDecodeError:
             try:
-                # 尝试修复字符串内部未转义的换行
-                fixed_content = re.sub(r'(?<=[:[,])\s*\n\s*', ' ', cleaned_content)
-                return json.loads(fixed_content, strict=False)
-            except:
-                print(f"JSON Decode Error after fix: {je}")
-                print(f"Bad JSON Content: {cleaned_content}")
-                raise ValueError(f"Invalid JSON returned from LLM: {je}")
+                # 2. 尝试容错解析 (处理原始换行符)
+                return json.loads(json_text, strict=False)
+            except json.JSONDecodeError as e:
+                # 3. 最后的挣扎：清理掉可能导致 JSON 失效的非法控制字符，但保留 \n
+                print(f"JSON Parsing failed, attempting final cleanup: {e}")
+                # 保护一下真正的换行符，临时替换
+                temp_text = json_text.replace("\\n", "[[NEWLINE]]").replace("\n", "[[NEWLINE]]")
+                # 移除其他控制字符
+                temp_text = "".join(char for char in temp_text if ord(char) >= 32 or char in "\n\r\t")
+                # 还原换行符为 JSON 兼容的转义符
+                final_text = temp_text.replace("[[NEWLINE]]", "\\n")
+                
+                try:
+                    return json.loads(final_text, strict=False)
+                except Exception as final_e:
+                    print(f"All JSON parsing attempts failed: {final_e}")
+                    print(f"Raw content: {content[:500]}...")
+                    raise ValueError(f"Invalid JSON response: {final_e}")
+
         
     except Exception as e:
         print(f"Error in generating quiz: {e}")
@@ -307,8 +488,8 @@ def generate_quiz_endpoint(request: QuizRequest):
     # 1. 抓取文章内容、标题、封面图和作者
     full_content, page_title, cover_image, author = fetch_article_content(request.url)
     
-    # 2. 截取前 6000 字符 (避免超出上下文限制)
-    truncated_content = full_content[:6000]
+    # 2. 截取前 12000 字符 (B站字幕通常较长，放宽一点限制)
+    truncated_content = full_content[:12000]
     word_count = len(full_content)
     estimated_time = max(1, word_count // 400)  # 假设每分钟阅读400字
     
@@ -329,7 +510,7 @@ def generate_quiz_endpoint(request: QuizRequest):
     source_logo = None
     source_name = "未知来源"
     
-    if "bilibili" in domain:
+    if "bilibili" in domain or extract_bvid(request.url):
         source_logo = "/bilibili.png"
         source_name = "哔哩哔哩"
     elif "weixin" in domain or "wechat" in domain:
@@ -424,6 +605,17 @@ def get_single_article(article_id: str):
         if not row:
             raise HTTPException(status_code=404, detail="Article not found")
         return CollectedArticle(**dict(row))
+
+@app.delete("/api/article/{article_id}")
+def delete_article(article_id: str):
+    """从数据库中删除指定文章"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM articles WHERE id = ?", (article_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Article not found")
+        conn.commit()
+    return {"status": "success", "message": "Article deleted"}
 
 # 挂载前端静态文件 (用于部署)
 # 只有当 dist 目录存在时才挂载，确保本地开发时不会报错

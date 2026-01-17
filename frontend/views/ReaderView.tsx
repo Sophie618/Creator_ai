@@ -333,15 +333,27 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
                       style={{ fontSize: `${fontSize}px` }}
                     >
                       {(articleData?.cleaned_content || articleData?.content) ? (
-                        (articleData.cleaned_content || articleData.content)
-                          .split('\n')
-                          .map(p => p.trim())
-                          .filter(p => p.length > 0)
-                          .map((p, i) => (
-                            <p key={i} className={i === 0 ? 'drop-cap' : ''}>
-                              {p}
-                            </p>
-                          ))
+                        (() => {
+                          const rawContent = articleData.cleaned_content || articleData.content || "";
+                          // 1. 处理常见的各种换行符，统一转为 \n
+                          let sanitized = rawContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                          
+                          // 2. 检查是否完全没有换行（如果全文很长但没有一个换行，尝试强制分段）
+                          if (!sanitized.includes('\n') && sanitized.length > 500) {
+                             // 按照句号分段，大致每 3-4 个句号分一段
+                             sanitized = sanitized.replace(/([。！？；]|\.\s)/g, "$1\n\n");
+                          }
+
+                          return sanitized
+                            .split('\n')
+                            .map(p => p.trim())
+                            .filter(p => p.length > 0)
+                            .map((p, i) => (
+                              <p key={i} className={i === 0 ? 'drop-cap' : ''}>
+                                {p}
+                              </p>
+                            ));
+                        })()
                       ) : (
                         <p className="text-slate-400 italic">正在提取正文内容...</p>
                       )}
@@ -353,23 +365,12 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
                        </div>
                        <div className="space-y-3">
                          <h4 className="text-3xl font-black">恭喜，完成深读</h4>
-                         <p className={`${themeConfig[theme].muted} font-bold`}>您已成功同步本篇文章的核心认知。右侧矩阵提供了更宏观的逻辑归纳。</p>
+                         <p className={`${themeConfig[theme].muted} font-bold`}>您已成功同步本篇文章的核心认知。快试试右上角的AI暴论🤩！</p>
                        </div>
                     </div>
                   </div>
                 </article>
 
-                {/* 将原本侧边栏的行动项移至文章底部，作为阅读完成后的引导 */}
-                <div className="mt-12 mb-24 animate-in fade-in slide-in-from-bottom-10 delay-500 fill-mode-both">
-                  <button 
-                    onClick={() => setViewState('quiz')}
-                    className="w-full bg-slate-900 dark:bg-indigo-600 hover:bg-black dark:hover:bg-indigo-700 text-white py-6 rounded-[32px] font-black text-lg flex items-center justify-center gap-3 shadow-2xl shadow-indigo-500/20 transition-all active:scale-95 group"
-                  >
-                    开始知识博弈 
-                    <ArrowRight size={22} className="group-hover:translate-x-2 transition-transform" />
-                  </button>
-                  <p className="text-center mt-6 text-slate-400 text-xs font-bold tracking-widest uppercase">已同步至认知空间 · v3.0</p>
-                </div>
               </div>
             </div>
           </div>
