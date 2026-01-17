@@ -67,9 +67,45 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
 
   const [showShareCard, setShowShareCard] = useState(false);
   const [opinions, setOpinions] = useState<any[]>([]);
+  const [rantContent, setRantContent] = useState<string>(""); 
+  const [isGeneratingRant, setIsGeneratingRant] = useState(false);
 
   // 分析相关状态
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // ... (existing code)
+
+  const handleRantClick = async () => {
+     if (rantContent) {
+         setShowShareCard(true);
+         return;
+     }
+
+     setIsGeneratingRant(true);
+     try {
+         const response = await fetch('http://127.0.0.1:8000/api/generate-rant', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ url: articleData?.url || initialUrl || "" })
+         });
+         
+         if (response.ok) {
+             const data = await response.json();
+             setRantContent(data.rant);
+             setShowShareCard(true);
+         } else {
+             // Fallback
+             setRantContent("AI 暂时无法生成暴论...");
+             setShowShareCard(true);
+         }
+     } catch (e) {
+         console.error("Failed to generate rant", e);
+         setRantContent("网络连接错误");
+         setShowShareCard(true);
+     } finally {
+         setIsGeneratingRant(false);
+     }
+  };
   const [analysisData, setAnalysisData] = useState<AnalysisResult | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 
@@ -253,11 +289,16 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
               {/* 阅读器控制栏 */}
               <div className="fixed top-8 right-8 z-50 flex items-center gap-4 p-2 transition-all">
                 <button 
-                  onClick={() => setShowShareCard(true)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-2xl flex items-center gap-2 shadow-lg shadow-indigo-500/30 transition-all hover:scale-105 active:scale-95 text-xs font-black tracking-widest uppercase group"
+                  onClick={handleRantClick}
+                  disabled={isGeneratingRant}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-2xl flex items-center gap-2 shadow-lg shadow-indigo-500/30 transition-all hover:scale-105 active:scale-95 text-xs font-black tracking-widest uppercase group disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  <Sparkles size={16} className="text-indigo-200 group-hover:rotate-12 transition-transform" />
-                  AI 暴论
+                  {isGeneratingRant ? (
+                    <Loader2 size={16} className="text-indigo-200 animate-spin" />
+                  ) : (
+                    <Sparkles size={16} className="text-indigo-200 group-hover:rotate-12 transition-transform" />
+                  )}
+                  {isGeneratingRant ? "生成中..." : "AI 暴论"}
                 </button>
 
                 <div className="flex items-center gap-2 p-1 bg-white/80 dark:bg-black/80 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
@@ -379,7 +420,7 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
       {showShareCard && (
         <ShareCard 
           onClose={() => setShowShareCard(false)}
-          title={articleData?.title}
+          title={rantContent || articleData?.title}
           defaultCover={articleData?.cover_image}
           qrCodeUrl={articleData?.url}
         />

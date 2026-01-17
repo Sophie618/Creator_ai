@@ -479,11 +479,74 @@ Output JSON 示例:
                     raise ValueError(f"Invalid JSON response: {final_e}")
 
         
-    except Exception as e:
-        print(f"Error in generating quiz: {e}")
-        raise HTTPException(status_code=500, detail=f"LLM generation failed: {str(e)}")
+def generate_quiz_from_text(text: str) -> dict:
+    """
+    使用 Minimax 将长文本转换为 3 个针对性的 Quiz 问题（对赌模式）
+    """
+    if not text:
+        return {}
 
-@app.post("/api/generate-quiz", response_model=QuizListResponse)
+    api_key = os.getenv("MINIMAX_API_KEY")
+    if not api_key:
+        print("Missing MINIMAX_API_KEY, skipping AI generation.")
+        return {}
+        
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.minimax.chat/v1"
+    )
+    
+    system_prompt = """你是一个深度阅读理解专家和认知教练...""" 
+    # (Original prompt logic omitted for brevity in search, but will keep original function content unchanged if I am not replacing it. Wait, I am inserting a NEW function, not replacing this one. I will use insert or careful replace.)
+
+# ... Actually, I should add the new function AFTER generate_quiz_from_text.
+
+def generate_rant_from_text(text: str) -> str:
+    """
+    使用 Minimax 生成极具传播力的‘暴论式标题’
+    """
+    if not text:
+        return "AI生成的暴论失败了..."
+
+    api_key = os.getenv("MINIMAX_API_KEY")
+    if not api_key:
+        return "未配置 Minimax API Key"
+        
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.minimax.chat/v1"
+    )
+    
+    system_prompt = """你是一位顶级自媒体爆款标题专家。你的任务是：基于用户提供的文本内容，生成一个极具传播力的‘暴论式标题’。要求：1）标题必须反常识、情绪强烈、使用绝对化语言（如‘所有’‘根本’‘早就’‘别再’等）；2）字数严格控制在8–15个汉字；3）只输出标题本身，不要任何解释、标点（除必要顿号/问号外）、前缀或后缀；4）标题必须根植于用户提供的文本事实，不可凭空捏造。"""
+
+    try:
+        completion = client.chat.completions.create(
+            model="abab6.5s-chat",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"【原文内容】\n{text[:6000]}"} # Limit context to save tokens
+            ],
+            temperature=0.7, # Higher temperature for creativity
+            max_tokens=50
+        )
+        return completion.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Rant generation failed: {e}")
+        return "AI 陷入了沉思..."
+
+@app.post("/api/generate-rant")
+def generate_rant_endpoint(request: QuizRequest):
+    # Reuse QuizRequest since it has 'url'. Or create a new model if we want to pass text directly?
+    # Passing URL is safer for bandwidth, backend fetches content.
+    
+    # 1. Fetch content
+    full_content, _, _, _ = fetch_article_content(request.url)
+    
+    # 2. Generate Rant
+    rant = generate_rant_from_text(full_content)
+    
+    return {"rant": rant}
+
 def generate_quiz_endpoint(request: QuizRequest):
     # 1. 抓取文章内容、标题、封面图和作者
     full_content, page_title, cover_image, author = fetch_article_content(request.url)
