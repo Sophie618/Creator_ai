@@ -33,11 +33,16 @@ interface CollectedArticle {
   title: string;
   url: string;
   cover_image?: string;
+  coverImage?: string;
   source: string;
   word_count: number;
+  wordCount?: number;
   estimated_time: number;
+  estimatedTime?: number;
   status: string;
   created_at: string;
+  createdAt?: string;
+  progress?: number;
 }
 
 interface LibraryViewProps {
@@ -76,7 +81,15 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
         const response = await fetch('http://127.0.0.1:8000/api/collected-articles');
         if (response.ok) {
           const data = await response.json();
-          setCollectedArticles(data.articles || []);
+          const normalized = (data.articles || []).map((a: CollectedArticle) => ({
+            ...a,
+            coverImage: a.cover_image,
+            wordCount: a.word_count,
+            estimatedTime: a.estimated_time,
+            createdAt: a.created_at,
+            progress: a.status === 'completed' ? 100 : 60
+          }));
+          setCollectedArticles(normalized);
         }
       } catch (error) {
         console.error('Failed to fetch collected articles:', error);
@@ -210,7 +223,12 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
                 }`}
               >
                 <div className={`${viewMode === 'grid' ? 'h-56 w-full' : 'w-24 h-24 shrink-0 rounded-2xl overflow-hidden'} bg-slate-100 relative`}>
-                  <img src={article.coverImage} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={article.title} />
+                  <img
+                    src={article.coverImage || article.cover_image || '/hero.png'}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    alt={article.title}
+                    onError={(e) => { e.currentTarget.src = '/hero.png'; }}
+                  />
                   <div className="absolute top-4 left-4">
                     <span className="px-3 py-1 bg-white/90 backdrop-blur rounded-full text-[10px] font-black uppercase text-indigo-600 shadow-sm">
                       {article.source}
