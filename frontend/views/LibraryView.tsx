@@ -190,84 +190,60 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
                   <span>{cat.icon}</span>
                   {cat.name}
                   <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeCategory === cat.name ? 'bg-white/20' : 'bg-slate-100 text-slate-400'}`}>
-                    {cat.name === '全部' ? collectedArticles.length : collectedArticles.filter(a => a.source === cat.sourceKey).length}
+                    {cat.name === '全部' ? articles.length : articles.filter(a => (activeCategory === '公众号' ? a.source === 'Medium' : a.source === cat.sourceKey)).length}
                   </span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Loading State */}
-          {isLoading && (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <Loader2 className="animate-spin text-indigo-600" size={32} />
-              <p className="text-slate-500">加载收录文章...</p>
-            </div>
-          )}
-
-          {/* Empty State */}
-          {!isLoading && collectedArticles.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center">
-                <LinkIcon className="text-slate-400" size={24} />
-              </div>
-              <p className="text-slate-500 text-sm">还没有收录任何文章，去首页分析链接吧</p>
-            </div>
-          )}
-
           {/* Cards Grid */}
-          {!isLoading && collectedArticles.length > 0 && (
-            <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8" : "space-y-4"}>
-              {filteredArticles.map(article => (
-                <div 
-                  key={article.id} 
-                  onClick={() => window.open(article.url, '_blank')}
-                  className={`group bg-white border border-slate-200 transition-all cursor-pointer relative ${
-                    viewMode === 'grid' 
-                    ? "rounded-[40px] overflow-hidden hover:border-indigo-300 hover:shadow-2xl hover:shadow-indigo-500/5 hover:-translate-y-2" 
-                    : "rounded-[24px] p-5 flex items-center gap-8 hover:border-indigo-300"
-                  }`}
-                >
-                  <div className={`${viewMode === 'grid' ? 'h-56 w-full' : 'w-24 h-24 shrink-0 rounded-2xl overflow-hidden'} bg-slate-100 relative`}>
-                    {article.cover_image ? (
-                      <img src={article.cover_image} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={article.title} />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <FileText className="text-slate-300" size={48} />
-                      </div>
-                    )}
-                    <div className="absolute top-4 left-4">
-                      <span className="px-3 py-1 bg-white/90 backdrop-blur rounded-full text-[10px] font-black uppercase text-indigo-600 shadow-sm">
-                        {article.source}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className={`${viewMode === 'grid' ? 'p-8' : 'flex-1'}`}>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">{article.estimated_time} MINS</span>
-                        <span className="w-1 h-1 bg-slate-200 rounded-full" />
-                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">{article.word_count} WORDS</span>
-                      </div>
-                    </div>
-                    
-                    <h3 className={`font-black text-slate-900 mb-6 group-hover:text-indigo-600 transition-colors leading-tight ${viewMode === 'grid' ? 'text-xl line-clamp-2' : 'text-2xl'}`}>
-                      {article.title}
-                    </h3>
-                    
-                    <div className="flex items-center justify-between mt-auto pt-6 border-t border-slate-50">
-                      <span className={`text-[10px] font-black px-3 py-1 rounded-lg uppercase tracking-widest ${
-                        article.status === 'completed' ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400 bg-slate-50'
-                      }`}>
-                        {statusMap[article.status]}
-                      </span>
-                    </div>
+          <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8" : "space-y-4"}>
+            {filteredArticles.map(article => (
+              <div 
+                key={article.id} 
+                onClick={() => onSelectArticle(article.id)}
+                className={`group bg-white border border-slate-200 transition-all cursor-pointer relative ${
+                  viewMode === 'grid' 
+                  ? "rounded-[40px] overflow-hidden hover:border-indigo-300 hover:shadow-2xl hover:shadow-indigo-500/5 hover:-translate-y-2" 
+                  : "rounded-[24px] p-5 flex items-center gap-8 hover:border-indigo-300"
+                }`}
+              >
+                <div className={`${viewMode === 'grid' ? 'h-56 w-full' : 'w-24 h-24 shrink-0 rounded-2xl overflow-hidden'} bg-slate-100 relative`}>
+                  <img src={article.coverImage} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={article.title} />
+                  <div className="absolute top-4 left-4">
+                    <span className="px-3 py-1 bg-white/90 backdrop-blur rounded-full text-[10px] font-black uppercase text-indigo-600 shadow-sm">
+                      {article.source}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+
+                <div className={`${viewMode === 'grid' ? 'p-8' : 'flex-1'}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">{article.estimatedTime} MINS</span>
+                      <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                      <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">{article.wordCount} WORDS</span>
+                    </div>
+                  </div>
+                  
+                  <h3 className={`font-black text-slate-900 mb-6 group-hover:text-indigo-600 transition-colors leading-tight ${viewMode === 'grid' ? 'text-xl line-clamp-2' : 'text-2xl'}`}>
+                    {article.title}
+                  </h3>
+                  
+                  <div className="flex items-center justify-between mt-auto pt-6 border-t border-slate-50">
+                    <div className="flex-1 max-w-[120px] h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${article.progress}%` }} />
+                    </div>
+                    <span className={`text-[10px] font-black px-3 py-1 rounded-lg uppercase tracking-widest ${
+                      article.status === 'completed' ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400 bg-slate-50'
+                    }`}>
+                      {statusMap[article.status]}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
