@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   User, 
   ShieldCheck, 
@@ -26,10 +26,16 @@ import {
 
 interface SettingsViewProps {
   onUpgrade: () => void;
+  initialTab: 'profile' | 'security' | 'subscription' | 'personal' | 'insights' | 'help';
+  onTabChange: (tab: 'profile' | 'security' | 'subscription' | 'personal' | 'insights' | 'help') => void;
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ onUpgrade }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'subscription' | 'personal' | 'insights' | 'help'>('profile');
+const SettingsView: React.FC<SettingsViewProps> = ({ onUpgrade, initialTab, onTabChange }) => {
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'subscription' | 'personal' | 'insights' | 'help'>(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
 
   const menuItems = [
@@ -74,7 +80,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onUpgrade }) => {
             {menuItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
+                onClick={() => {
+                  setActiveTab(item.id as any);
+                  onTabChange(item.id as any);
+                }}
                 className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl transition-all font-bold text-sm ${
                   activeTab === item.id 
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 scale-[1.02]' 
