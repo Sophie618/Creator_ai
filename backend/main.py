@@ -285,12 +285,19 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
         return fetch_bilibili_subtitles(bvid)
 
     # 1. 使用 requests 获取网页源码 (更好地模拟浏览器，通过 headers 发送 User-Agent)
+    # 模拟 Mac Chrome 的头部，尽可能模拟真实用户行为，减少被识别为爬虫的概率
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive"
     }
     try:
         resp = requests.get(url, headers=headers, timeout=15)
         resp.raise_for_status()
+        # 强制设置编码为 utf-8，防止 requests 自动推断错误（微信有时会是 ISO-8859-1）
+        resp.encoding = "utf-8"
         downloaded = resp.text
     except Exception as e:
         print(f"Requests fetch failed, falling back to trafilatura fetch: {e}")
