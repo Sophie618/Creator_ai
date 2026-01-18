@@ -83,7 +83,7 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
 
      setIsGeneratingRant(true);
      try {
-         const response = await fetch('http://127.0.0.1:8000/api/generate-rant', {
+         const response = await fetch('/api/generate-rant', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({ url: articleData?.url || initialUrl || "" })
@@ -117,8 +117,8 @@ const ReaderView: React.FC<ReaderViewProps> = ({ articleId, initialUrl, onBack }
       setViewState('loading');
       try {
         const url = idOrUrl.startsWith('http') 
-          ? `http://127.0.0.1:8000/api/article/url?url=${encodeURIComponent(idOrUrl)}`
-          : `http://127.0.0.1:8000/api/article/${idOrUrl}`;
+          ? `/api/article/url?url=${encodeURIComponent(idOrUrl)}`
+          : `/api/article/${idOrUrl}`;
           
         const response = await fetch(url);
         if (response.ok) {

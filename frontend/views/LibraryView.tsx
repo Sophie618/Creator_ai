@@ -89,7 +89,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
   const fetchCollectedArticles = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://127.0.0.1:8000/api/collected-articles');
+      const response = await fetch('/api/collected-articles');
       if (response.ok) {
         const data = await response.json();
         const normalized = (data.articles || []).map((a: CollectedArticle) => ({
@@ -113,7 +113,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ onSelectArticle }) => {
     e.stopPropagation();
     if (!confirm('确定要删除这篇文章吗？')) return;
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/article/${id}`, {
+      const response = await fetch(`/api/article/${id}`, {
         method: 'DELETE',
       });
       if (response.ok) {
