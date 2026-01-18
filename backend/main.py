@@ -478,28 +478,9 @@ Output JSON 示例:
                     print(f"Raw content: {content[:500]}...")
                     raise ValueError(f"Invalid JSON response: {final_e}")
 
-        
-def generate_quiz_from_text(text: str) -> dict:
-    """
-    使用 Minimax 将长文本转换为 3 个针对性的 Quiz 问题（对赌模式）
-    """
-    if not text:
-        return {}
-
-    api_key = os.getenv("MINIMAX_API_KEY")
-    if not api_key:
-        print("Missing MINIMAX_API_KEY, skipping AI generation.")
-        return {}
-        
-    client = OpenAI(
-        api_key=api_key,
-        base_url="https://api.minimax.chat/v1"
-    )
-    
-    system_prompt = """你是一个深度阅读理解专家和认知教练...""" 
-    # (Original prompt logic omitted for brevity in search, but will keep original function content unchanged if I am not replacing it. Wait, I am inserting a NEW function, not replacing this one. I will use insert or careful replace.)
-
-# ... Actually, I should add the new function AFTER generate_quiz_from_text.
+    except Exception as e:
+        print(f"Error in generating quiz: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM generation failed: {str(e)}")
 
 def generate_rant_from_text(text: str) -> str:
     """
@@ -547,6 +528,7 @@ def generate_rant_endpoint(request: QuizRequest):
     
     return {"rant": rant}
 
+@app.post("/api/generate-quiz", response_model=QuizListResponse)
 def generate_quiz_endpoint(request: QuizRequest):
     # 1. 抓取文章内容、标题、封面图和作者
     full_content, page_title, cover_image, author = fetch_article_content(request.url)
