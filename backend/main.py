@@ -673,82 +673,110 @@ def generate_rant_endpoint(request: QuizRequest):
 
 @app.post("/api/generate-quiz", response_model=QuizListResponse)
 def generate_quiz_endpoint(request: QuizRequest):
-    # 1. 抓取文章内容、标题、封面图和作者
-    full_content, page_title, cover_image, author = fetch_article_content(request.url)
-    
-    # 2. 截取前 12000 字符 (B站字幕通常较长，放宽一点限制)
-    truncated_content = full_content[:12000]
-    word_count = len(full_content)
-    estimated_time = max(1, word_count // 400)  # 假设每分钟阅读400字
-    
-    # 3. 调用 LLM 生成竞猜和清洗内容
-    quiz_data = generate_quiz_from_text(truncated_content)
-    
-    # 4. 获取清洗后的内容，如果 LLM 没返回则回退到 full_content
-    cleaned_content = quiz_data.get("cleaned_content", full_content)
-    
-    # 4. 组装最终返回
-    raw_questions = quiz_data.get("questions", [])
-    
-    items = []
-
-    # 域名用于 Logo 和来源识别
-    parsed = urlparse(request.url)
-    domain = (parsed.hostname or "").lower()
-    source_logo = None
-    source_name = "未知来源"
-    
-    if "bilibili" in domain or extract_bvid(request.url):
-        source_logo = "/bilibili.png"
-        source_name = "哔哩哔哩"
-    elif "weixin" in domain or "wechat" in domain:
-        source_logo = "/wechat-article.png"
-        source_name = "公众号"
-    elif "xiaohongshu" in domain or "xhs" in domain:
-        source_name = "小红书"
-    
-    for q in raw_questions:
-        items.append(SingleQuiz(
-            question=q.get("question", "生成失败"),
-            options=q.get("options", ["是", "否"]),
-            correct_answer=q.get("correct_answer", "是"),
-            evidence=q.get("evidence", ""),
-            jump_url=request.url,
-            source_title=page_title,
-            source_logo=source_logo,
-            source_cover=cover_image
-        ))
-    
-    # 5. 保存文章到收录列表（持久化到 SQLite）
-    article_id = None
-    quiz_json_str = json.dumps(raw_questions, ensure_ascii=False)
-    
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM articles WHERE url = ?", (request.url,))
-        existing = cursor.fetchone()
+    print(f"[API] Received quiz generation request for: {request.url}")
+    try:
+        # 1. 抓取文章内容、标题、封面图和作者
+        print(f"[API] Fetching content...")
+        full_content, page_title, cover_image, author = fetch_article_content(request.url)
+        print(f"[API] Content fetched. Length: {len(full_content)} chars")
         
-        if not existing:
-            import uuid
-            article_id = f"art_{uuid.uuid4().hex[:8]}"
-            cursor.execute("""
-                INSERT INTO articles 
-                (id, title, url, cover_image, source, word_count, estimated_time, status, created_at, content, cleaned_content, quiz_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                article_id,
-                page_title or "未命名文章",
-                request.url,
-                cover_image,
-                source_name,
-                word_count,
-                estimated_time,
-                "quiz_generated",
-                datetime.now().isoformat(),
-                full_content,
-                cleaned_content,
-                quiz_json_str
+        # 2. 截取前 12000 字符 (B站字幕通常较长，放宽一点限制)
+        truncated_content = full_content[:12000]
+        word_count = len(full_content)
+        estimated_time = max(1, word_count // 400)  # 假设每分钟阅读400字
+        
+        # 3. 调用 LLM 生成竞猜和清洗内容
+        print(f"[API] Generating quiz via LLM...")
+        quiz_data = generate_quiz_from_text(truncated_content)
+        print(f"[API] LLM generation successful.")
+        
+        # 4. 获取清洗后的内容，如果 LLM 没返回则回退到 full_content
+        cleaned_content = quiz_data.get("cleaned_content", full_content)
+        
+        # 4. 组装最终返回
+        raw_questions = quiz_data.get("questions", [])
+        
+        items = []
+
+        # 域名用于 Logo 和来源识别
+        parsed = urlparse(request.url)
+        domain = (parsed.hostname or "").lower()
+        source_logo = None
+        source_name = "未知来源"
+        
+        if "bilibili" in domain or extract_bvid(request.url):
+            source_logo = "/bilibili.png"
+            source_name = "哔哩哔哩"
+        elif "weixin" in domain or "wechat" in domain:
+            source_logo = "/wechat-article.png"
+            source_name = "公众号"
+        elif "xiaohongshu" in domain or "xhs" in domain:
+            source_name = "小红书"
+        
+        for q in raw_questions:
+            items.append(SingleQuiz(
+                question=q.get("question", "生成失败"),
+                options=q.get("options", ["是", "否"]),
+                correct_answer=q.get("correct_answer", "是"),
+                evidence=q.get("evidence", ""),
+                jump_url=request.url,
+                source_title=page_title,
+                source_logo=source_logo,
+                source_cover=cover_image
             ))
+        
+        # 5. 保存文章到收录列表（持久化到 SQLite）
+        article_id = None
+        quiz_json_str = json.dumps(raw_questions, ensure_ascii=False)
+        
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM articles WHERE url = ?", (request.url,))
+            existing = cursor.fetchone()
+            
+            if not existing:
+                import uuid
+                article_id = f"art_{uuid.uuid4().hex[:8]}"
+                cursor.execute("""
+                    INSERT INTO articles 
+                    (id, title, url, cover_image, source, word_count, estimated_time, status, created_at, content, cleaned_content, quiz_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    article_id,
+                    page_title or "未命名文章",
+                    request.url,
+                    cover_image,
+                    source_name,
+                    word_count,
+                    estimated_time,
+                    "quiz_generated",
+                    datetime.now().isoformat(),
+                    full_content,
+                    cleaned_content,
+                    quiz_json_str
+                ))
+                conn.commit()
+                print(f"[API] Article saved to DB: {article_id}")
+            else:
+                article_id = existing[0]
+                # 更新操作
+                cursor.execute("""
+                    UPDATE articles SET
+                    title = ?, cover_image = ?, updated_at = CURRENT_TIMESTAMP, 
+                    quiz_json = ?, cleaned_content = ?
+                    WHERE id = ?
+                """, (page_title, cover_image, quiz_json_str, cleaned_content, article_id))
+                conn.commit()
+                print(f"[API] Article updated in DB: {article_id}")
+
+        return QuizListResponse(items=items, article_id=article_id)
+
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"[API Error] /api/generate-quiz failed:\n{error_msg}")
+        # 将详细错误返回给前端以便调试
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")            ))
             conn.commit()
         else:
             article_id = existing["id"]
