@@ -305,29 +305,57 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
 
     # 使用 bare_extraction 提取文本和元数据 (title, author, image)
     # 这会输出纯文本格式，保留段落结构，符合要求
-    result = trafilatura.bare_extraction(downloaded)
+    try:
+        result = trafilatura.bare_extraction(downloaded)
+    except Exception:
+        result = None
     
-    if result is None:
-         raise HTTPException(status_code=400, detail="Could not parse content from the page")
+    content = None
+    title = ""
+    author = ""
+    cover_image = None
     
     # Handle both dict (older versions) and Document object (newer versions)
-    if isinstance(result, dict):
-        content = result.get('text')
-        title = result.get('title', '')
-        author = result.get('author', '')
-        cover_image = result.get('image')
-    else:
-        content = getattr(result, 'text', None)
-        title = getattr(result, 'title', '')
-        author = getattr(result, 'author', '')
-        cover_image = getattr(result, 'image', None)
+    if result:
+        if isinstance(result, dict):
+            content = result.get('text')
+            title = result.get('title', '')
+            author = result.get('author', '')
+            cover_image = result.get('image')
+        else:
+            content = getattr(result, 'text', None)
+            title = getattr(result, 'title', '')
+            author = getattr(result, 'author', '')
+            cover_image = getattr(result, 'image', None)
 
     # 如果 bare_extraction 这里的 text 为空，尝试用 extract 单独提取一次作为后备
     if not content:
         content = trafilatura.extract(downloaded)
 
+    # 针对微信公众号的强力提取 (当 trafilatura 失败时)
+    if (not content or len(str(content)) < 50) and "weixin" in url:
+        print("Falling back to BS4 specific extraction for WeChat")
+        try:
+            soup_wx = BeautifulSoup(downloaded, "html.parser")
+            content_div = soup_wx.select_one("#js_content")
+            if content_div:
+                # 移除其中可能不可见的脚本样式
+                for s in content_div(["script", "style"]):
+                    s.decompose()
+                content = content_div.get_text(separator="\n\n", strip=True)
+            
+            # 同时尝试修补标题和作者
+            if not title:
+                t = soup_wx.select_one("#activity-name")
+                if t: title = t.get_text(strip=True)
+            if not author:
+                a = soup_wx.select_one("#js_name")
+                if a: author = a.get_text(strip=True)
+        except Exception as e:
+            print(f"BS4 WeChat fallback failed: {e}")
+
     if not content:
-         raise HTTPException(status_code=400, detail="Could not extract text content")
+         raise HTTPException(status_code=400, detail="Could not extract text content using any method")
 
     # 增强封面图和标题提取：
     # 针对微信公众号等特定平台，trafilatura 有时无法获取正确的标题或懒加载图片
