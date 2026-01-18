@@ -291,7 +291,9 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         "Cache-Control": "no-cache",
-        "Connection": "keep-alive"
+        "Connection": "keep-alive",
+        "Referer": "https://mp.weixin.qq.com/",
+        "Cookie": "appmsg_token=; wxtokenkey=777;"
     }
     try:
         resp = requests.get(url, headers=headers, timeout=15)
@@ -335,13 +337,10 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
             author = getattr(result, 'author', '')
             cover_image = getattr(result, 'image', None)
 
-    # 如果 bare_extraction 这里的 text 为空，尝试用 extract 单独提取一次作为后备
-    if not content:
-        content = trafilatura.extract(downloaded)
-
-    # 针对微信公众号的强力提取 (当 trafilatura 失败时)
-    if (not content or len(str(content)) < 50) and "weixin" in url:
-        print("Falling back to BS4 specific extraction for WeChat")
+    # 针对微信公众号的强力提取 (优先策略)
+    # 本地测试发现 trafilatura 提取微信文章内容不全，因此对微信文章默认启用 BS4 解析
+    if "weixin" in url:
+        print("Using BS4 specific extraction for WeChat (Priority)")
         try:
             soup_wx = BeautifulSoup(downloaded, "html.parser")
             content_div = soup_wx.select_one("#js_content")
@@ -349,7 +348,20 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
                 # 移除其中可能不可见的脚本样式
                 for s in content_div(["script", "style"]):
                     s.decompose()
-                content = content_div.get_text(separator="\n\n", strip=True)
+                
+                # 优化段落提取：微信段落通常在 p 标签里
+                # 直接 get_text 会把所有文字挤在一起。尝试遍历 p 标签构建内容。
+                paragraphs = []
+                for p in content_div.find_all(['p', 'section']):
+                     text = p.get_text(strip=True)
+                     if text:
+                         paragraphs.append(text)
+                
+                # 如果分段提取成功且内容足够，使用分段结果；否则回退到 get_text
+                if len(paragraphs) > 5:
+                    content = "\n\n".join(paragraphs)
+                else:
+                    content = content_div.get_text(separator="\n\n", strip=True)
             
             # 同时尝试修补标题和作者
             if not title:
@@ -359,8 +371,13 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
                 a = soup_wx.select_one("#js_name")
                 if a: author = a.get_text(strip=True)
         except Exception as e:
-            print(f"BS4 WeChat fallback failed: {e}")
+            print(f"BS4 WeChat extraction failed: {e}")
 
+    # Fallback to general extraction if content is still empty
+    if not content:
+        content = trafilatura.extract(downloaded)
+
+    # 针对微信公众号的强力提取 (当 trafilatura 失败时的二次兜底 - 已合并到上方优先策略，此处仅做普通兜底)
     if not content:
          raise HTTPException(status_code=400, detail="Could not extract text content using any method")
 
