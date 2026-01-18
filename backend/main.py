@@ -276,6 +276,45 @@ def fetch_bilibili_subtitles(bvid: str) -> Tuple[str, str, Optional[str], str]:
         if isinstance(e, HTTPException): raise e
         return f"解析失败: {str(e)}", "Bilibili 视频", None, "Bilibili"
 
+def fetch_via_jina_proxy(url: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """使用 Jina.ai Reader API 作为强力代理，绕过服务器 IP 封锁"""
+    try:
+        print(f"[Jina] Attempting proxy fetch for: {url}")
+        # Jina 会帮我们渲染并转为 Markdown，几乎能绕过所有静态反爬
+        jina_url = f"https://r.jina.ai/{url}"
+        
+        # Jina 有时需要一些时间渲染，设置较长超时
+        resp = requests.get(jina_url, timeout=30)
+        
+        if resp.status_code != 200:
+            print(f"[Jina] Failed with status {resp.status_code}")
+            return None, None, None, None
+            
+        text = resp.text
+        if not text or len(text) < 100 or "Access Denied" in text:
+            return None, None, None, None
+            
+        # 解析 Jina 返回的 Markdown
+        lines = text.splitlines()
+        title = "微信文章 (Proxy)"
+        
+        # Jina 通常把标题作为第一行 # Title
+        if lines and lines[0].startswith("# "):
+            title = lines[0][2:].strip()
+            
+        # 尝试提取第一张图片作为封面
+        cover_image = None
+        # 正则匹配 Markdown 图片 ![...](url)
+        img_match = re.search(r'!\[.*?\]\((https?://.*?)\)', text)
+        if img_match:
+            cover_image = img_match.group(1)
+            
+        return text, title, cover_image, "WeChat/Jina"
+        
+    except Exception as e:
+        print(f"[Jina] Proxy error: {e}")
+        return None, None, None, None
+
 def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[str]]:
     """抓取文章内容、标题、封面图和作者"""
     
@@ -283,6 +322,15 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
     bvid = extract_bvid(url)
     if bvid:
         return fetch_bilibili_subtitles(bvid)
+
+    # 0.5 针对微信公众号的绝杀策略：使用 Jina 代理
+    # 因为 ModelScope 的 IDC IP 几乎必定被微信封锁，直接请求成功率极低
+    # 使用 Jina 服务代为抓取是目前最稳妥的方案
+    if "weixin" in url:
+        j_content, j_title, j_cover, j_author = fetch_via_jina_proxy(url)
+        if j_content:
+            print("[Fetch] Specifically used Jina Proxy for WeChat success.")
+            return j_content, j_title, j_cover, j_author
 
     # 1. 使用 requests 获取网页源码 (更好地模拟浏览器，通过 headers 发送 User-Agent)
     # 切换回标准的 Windows Chrome 头部，这是最通用的指纹，在服务器环境下比 Mobile/Mac 兼容性更好
