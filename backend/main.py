@@ -285,22 +285,29 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
         return fetch_bilibili_subtitles(bvid)
 
     # 1. 使用 requests 获取网页源码 (更好地模拟浏览器，通过 headers 发送 User-Agent)
-    # 模拟 Mac Chrome 的头部，尽可能模拟真实用户行为，减少被识别为爬虫的概率
+    # 模拟 Android 微信 的头部，通常能直接获取到包含正文的静态 HTML
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G973F Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/81.0.4044.138 Mobile Safari/537.36 MicroMessenger/7.0.13.1640(0x27000D37) Process/tools NetType/WIFI Language/zh_CN ABI/arm64",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
         "Referer": "https://mp.weixin.qq.com/",
-        "Cookie": "appmsg_token=; wxtokenkey=777;"
     }
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
+        # verify=False 忽略 SSL 错误，防止线上环境证书链问题
+        resp = requests.get(url, headers=headers, timeout=15, verify=False)
         resp.raise_for_status()
-        # 强制设置编码为 utf-8，防止 requests 自动推断错误（微信有时会是 ISO-8859-1）
         resp.encoding = "utf-8"
         downloaded = resp.text
+        
+        # 记录简单的日志
+        print(f"[Fetch] URL: {url}, Status: {resp.status_code}, Length: {len(downloaded)}")
+        
+        # 增加对 WAF 页面的检测
+        if "<title>验证</title>" in downloaded or "class=\"weui-msg\"" in downloaded:
+            print("[Fetch] Detected WeChat WAF/Captcha page.")
+            # 如果是 WAF 页面，抛出异常，触发 fallback 或者报错
+            raise HTTPException(status_code=403, detail="WeChat requires CAPTCHA verification (IP blocked)")
+            
     except Exception as e:
         print(f"Requests fetch failed, falling back to trafilatura fetch: {e}")
         downloaded = trafilatura.fetch_url(url)
