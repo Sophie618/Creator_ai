@@ -97,7 +97,8 @@ const App: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Analysis failed');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Analysis failed with status ${response.status}`);
       }
 
       const data: QuizListResponse = await response.json();
@@ -105,9 +106,9 @@ const App: React.FC = () => {
         setCurrentArticleId(data.article_id);
       }
       setDashboardQuizData(data.items);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Failed to analyze/generate quiz. Please check the backend connection.');
+      alert(error.message || 'Failed to analyze/generate quiz. Please check the backend connection.');
     } finally {
       setDashboardLoading(false);
     }
