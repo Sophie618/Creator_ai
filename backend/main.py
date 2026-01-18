@@ -276,11 +276,25 @@ def fetch_bilibili_subtitles(bvid: str) -> Tuple[str, str, Optional[str], str]:
         if isinstance(e, HTTPException): raise e
         return f"解析失败: {str(e)}", "Bilibili 视频", None, "Bilibili"
 
+def clean_url(url: str) -> str:
+    """Clean the URL to remove unwanted parameters and fix encoding issues."""
+    try:
+        # Decode HTML entities (like &amp; -> &)
+        import html
+        url = html.unescape(url)
+        # Strip whitespace
+        url = url.strip()
+        return url
+    except Exception:
+        return url
+
 def fetch_via_jina_proxy(url: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     """使用 Jina.ai Reader API 作为强力代理，绕过服务器 IP 封锁"""
     try:
+        url = clean_url(url)
         print(f"[Jina] Attempting proxy fetch for: {url}")
         # Jina 会帮我们渲染并转为 Markdown，几乎能绕过所有静态反爬
+        # 必须确保 URL 是 cleanly encoded 的
         jina_url = f"https://r.jina.ai/{url}"
         
         # Jina 有时需要一些时间渲染，设置较长超时
@@ -291,9 +305,12 @@ def fetch_via_jina_proxy(url: str) -> Tuple[Optional[str], Optional[str], Option
             return None, None, None, None
             
         text = resp.text
-        if not text or len(text) < 100 or "Access Denied" in text:
+        # Jina 有时会返回 Access Denied 页面
+        if not text or len(text) < 100 or "Access Denied" in text or "Cloudflare" in text:
+            print(f"[Jina] Returned invalid content: {text[:100]}...")
             return None, None, None, None
             
+        print(f"[Jina] Success. Length: {len(text)}")
         # 解析 Jina 返回的 Markdown
         lines = text.splitlines()
         title = "微信文章 (Proxy)"
@@ -317,6 +334,7 @@ def fetch_via_jina_proxy(url: str) -> Tuple[Optional[str], Optional[str], Option
 
 def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[str]]:
     """抓取文章内容、标题、封面图和作者"""
+    url = clean_url(url)
     
     # 0. 优先处理 Bilibili 链接
     bvid = extract_bvid(url)
