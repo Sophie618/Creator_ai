@@ -1,5 +1,15 @@
 {
     "sdk_type": "docker",
     "resource_configuration": "platform/2v-cpu-16g-mem",
-    "port": 7860
+    "port": 7860,
+    "environment_variables": [
+        {
+            "name": "MINIMAX_API_KEY",
+            "value": "sk-api-uHFwUQxcEC09aOVI65bhQb4vnYG2Qc7Wf-EKrXSJWnvBtZ8tZB1a2XYxvfNW5DWh4MR7yRhH7lLpp0qLl5m18gBWlxSOFBpyIDczZ3dun3EGBlLeqJRJUrM"
+        },
+        {
+            "name": "BILIBILI_SESSDATA",
+            "value": "396d5141%2C1784215640%2C50e01%2A12CjDoa142wgVd3eEwvUXVFrlRWGeUcEI0vygkSqJhPZgZG9I68yxbDoFMs9wkaTg4uV8SVnQ3a2hkb1pPT2tlQ3pLQ0l0MC10SG1EeDM3QWx0eUFaVjFYaXRyYXZhTW5nc0Rrb0pnekdLdnpxV21hNGNjMnRQQndDRVg1SXdHQnI4c0hUa2Nkb2p3IIEC"
+        }
+]
 }
