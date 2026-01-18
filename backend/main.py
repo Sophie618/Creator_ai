@@ -285,29 +285,47 @@ def fetch_article_content(url: str) -> Tuple[str, str, Optional[str], Optional[s
         return fetch_bilibili_subtitles(bvid)
 
     # 1. 使用 requests 获取网页源码 (更好地模拟浏览器，通过 headers 发送 User-Agent)
-    # 模拟 Android 微信 的头部，通常能直接获取到包含正文的静态 HTML
+    # 切换回标准的 Windows Chrome 头部，这是最通用的指纹，在服务器环境下比 Mobile/Mac 兼容性更好
     headers = {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G973F Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/81.0.4044.138 Mobile Safari/537.36 MicroMessenger/7.0.13.1640(0x27000D37) Process/tools NetType/WIFI Language/zh_CN ABI/arm64",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Cache-Control": "max-age=0",
+        "Connection": "keep-alive",
         "Referer": "https://mp.weixin.qq.com/",
+        "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1"
     }
     try:
-        # verify=False 忽略 SSL 错误，防止线上环境证书链问题
-        resp = requests.get(url, headers=headers, timeout=15, verify=False)
+        # 使用 verify=True (默认)，但如果有 SSL 错误再重试 verify=False
+        try:
+            resp = requests.get(url, headers=headers, timeout=20)
+        except requests.exceptions.SSLError:
+            print("[Fetch] SSL Error, retrying with verify=False")
+            resp = requests.get(url, headers=headers, timeout=20, verify=False)
+            
         resp.raise_for_status()
-        resp.encoding = "utf-8"
+        
+        # 智能编码检测：微信有时不会返回正确的 charset
+        if resp.encoding == 'ISO-8859-1' or not resp.encoding:
+            resp.encoding = resp.apparent_encoding
+            
         downloaded = resp.text
         
-        # 记录简单的日志
-        print(f"[Fetch] URL: {url}, Status: {resp.status_code}, Length: {len(downloaded)}")
+        # 记录日志方便线上排查
+        print(f"[Fetch] URL: {url}, Status: {resp.status_code}, Encoding: {resp.encoding}, Length: {len(downloaded)}")
         
-        # 增加对 WAF 页面的检测
-        if "<title>验证</title>" in downloaded or "class=\"weui-msg\"" in downloaded:
-            print("[Fetch] Detected WeChat WAF/Captcha page.")
-            # 如果是 WAF 页面，抛出异常，触发 fallback 或者报错
-            raise HTTPException(status_code=403, detail="WeChat requires CAPTCHA verification (IP blocked)")
-            
+        # 增加对 WAF 页面的检测 (标题或特定的 weui 类)
+        if "<title>验证</title>" in downloaded or "weui-msg" in downloaded:
+             print("[Fetch] Detected WeChat WAF/Captcha page.")
+             # 这里不抛出异常，而是让后续的 trafilatura 尝试一下（虽然机会渺茫），或者在解析阶段处理
+             
     except Exception as e:
         print(f"Requests fetch failed, falling back to trafilatura fetch: {e}")
         downloaded = trafilatura.fetch_url(url)
