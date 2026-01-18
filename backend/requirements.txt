@@ -7,3 +7,4 @@ python-dotenv
 trafilatura
 pydantic
 aiofiles
+lxml_html_clean
