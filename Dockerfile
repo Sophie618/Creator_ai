@@ -25,6 +25,17 @@ COPY frontend ./
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN npm run build
 
+# --- Build Landing Page ---
+WORKDIR /app/landing
+COPY landing/package.json landing/package-lock.json* ./
+RUN if [ -f package-lock.json ]; then \
+      npm ci --no-audit || npm install --no-audit; \
+    else \
+      npm install --no-audit; \
+    fi
+COPY landing ./
+RUN npm run build
+
 # Stage 2: Runtime Environment (Python FastAPI)
 FROM python:3.10-slim
 
@@ -35,6 +46,7 @@ WORKDIR /app
 # This prevents both heavy processes (npm build and apt-get/pip) from running in parallel,
 # which was causing OOM (Exit Code 137).
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
+COPY --from=frontend-builder /app/landing/dist /app/landing/dist
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

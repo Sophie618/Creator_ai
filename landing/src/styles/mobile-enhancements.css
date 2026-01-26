@@ -1,0 +1,69 @@
+/* 移动端增强：在已有媒体查询基础上补充
+   仅在小屏生效，PC 端保持原布局 */
+
+/* 0. 基础断点与内边距 */
+@media (max-width: 768px) {
+  body {
+    padding: 0 12px;          /* 全局左右留空，避免贴边 */
+  }
+
+  /* 1. 弹性容器自动换行，防止溢出 */
+  .content-stretch {
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+  }
+
+  /* 2. 按钮与链接最小可点击区域 44×44 */
+  button,
+  a,
+  [role="button"] {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    padding: 10px 12px !important;
+  }
+
+  /* 3. 输入框字体≥16px，防止 iOS 缩放 */
+  input,
+  button {
+    font-size: 16px !important;
+    line-height: 1.5 !important;
+  }
+
+  /* 4. 图片自适应，避免横向溢出 */
+  img,
+  video {
+    max-width: 100% !important;
+    height: auto !important;
+    display: block !important;
+  }
+
+  /* 5. 强制固定宽度类在小屏下占满 */
+  [class*="w-["],
+  [class*="size-["] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* 6. 隐藏水平滚动条，防止意外溢出 */
+  html,
+  body {
+    overflow-x: hidden;
+  }
+}
+
+/* 平板断点补充 */
+@media (max-width: 1024px) {
+  .content-stretch {
+    max-width: 100% !important;
+  }
+}
+
+/* 触控设备增强 */
+@media (pointer: coarse) {
+  button,
+  a,
+  [role="button"] {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+}

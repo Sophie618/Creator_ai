@@ -1,0 +1,281 @@
+/* 移动端响应式适配样式表
+   原则：保持 PC 端布局不变，仅在移动端 (<1024px) 重写布局逻辑
+   核心策略：将绝对定位布局强制转换为流式 Flex 布局
+*/
+
+/* ==========================================================================
+   Tablet & Mobile (< 1024px)
+   重置主要布局容器，将三列绝对定位布局改为单列流式布局
+   ========================================================================== */
+@media (max-width: 1024px) {
+  /* 1. 主容器重置 */
+  /* 原 PC 端：h-[890px] w-[1023px] relative */
+  div.h-\[890px\].relative.shrink-0.w-\[1023px\] {
+    width: 100% !important;
+    height: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 30px !important;
+  }
+
+  /* 2. 搜索栏区域重置 */
+  /* 原 PC 端：w-[873px] */
+  form.w-\[873px\] {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 10px;
+  }
+  
+  /* 搜索栏内部高度重置 */
+  .h-\[231px\] {
+    height: auto !important;
+    margin-bottom: 20px;
+  }
+
+  /* 3. 各板块重置为流式卡片 */
+  
+  /* (A) 今日播客 (TodaysPodcast) */
+  /* 原 PC 端：absolute left-[359px] top-0 w-[330px] */
+  div.absolute.left-\[359px\] {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 500px !important;
+    margin: 0 auto !important;
+    order: 1; /* 移动端显示顺序：1 */
+  }
+  /* 播客卡片宽度自适应 */
+  div.w-\[330px\] {
+    width: 100% !important;
+  }
+
+  /* (B) 问卷卡片组 (SurveyCards) */
+  /* 原 PC 端：absolute top-0 right-0 w-[310px] */
+  div.absolute.top-0.right-0.w-\[310px\] {
+    position: relative !important;
+    right: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 500px !important;
+    height: auto !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 20px !important;
+    order: 2; /* 移动端显示顺序：2 */
+  }
+
+  /* SurveyCard 单个卡片重置 */
+  /* 原 PC 端：absolute top 由 props 控制 */
+  /* 注意：这里选择器需要足够具体以覆盖内联样式，或者使用 !important */
+  div.absolute.content-stretch.flex-col.items-center.justify-center.w-\[310px\] {
+    position: relative !important;
+    top: auto !important;
+    width: 100% !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* (C) 文章列表 (ArticlesList) */
+  /* 原 PC 端：absolute h-[890px] left-0 top-0 w-[351px] */
+  div.absolute.h-\[890px\].left-0.top-0.w-\[351px\] {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 500px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 15px !important;
+    order: 3; /* 移动端显示顺序：3 */
+  }
+
+  /* ArticleCard 单个文章卡片重置 */
+  /* 强制去除旋转和绝对定位 */
+  div.absolute.flex.items-center.justify-center {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    transform: none !important; /* 去除旋转 */
+    margin-bottom: 0 !important;
+  }
+  
+  /* 文章卡片内部容器 */
+  div.bg-white.w-\[330px\] {
+    width: 100% !important;
+    transform: none !important; /* 去除 hover 旋转 */
+    height: auto !important;
+    min-height: 100px;
+  }
+}
+
+/* ==========================================================================
+   Mobile Only (< 768px)
+   针对手机屏幕的精细化调整
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 1. 字体大小调整 */
+  /* TypingText 大标题缩小 */
+  .text-\[48px\] {
+    font-size: 28px !important;
+    line-height: 1.2 !important;
+  }
+  
+  /* "Hi, 这是你的今日播客" 标题缩小 */
+  .text-\[32px\] {
+    font-size: 24px !important;
+  }
+
+  /* 2. 间距调整 */
+  /* 主容器 padding 减小 */
+  .p-\[50px\] {
+    padding: 20px 15px !important;
+  }
+  
+  /* 顶部 padding 减小 */
+  .pt-\[90px\] {
+    padding-top: 70px !important;
+  }
+
+  /* 3. 搜索框优化 */
+  /* 输入框文字缩小 */
+  input.text-\[20px\] {
+    font-size: 16px !important;
+  }
+  /* 搜索按钮调整 */
+  button.px-\[40px\] {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+    font-size: 16px !important;
+  }
+  
+  /* 4. LoginModal 登录弹窗适配 (重点优化) */
+  /* 遮罩层 z-index 提升 */
+  .fixed.inset-0.z-50.flex {
+    padding: 20px;
+    align-items: center; /* 垂直居中，当键盘弹出时会自动顶上去 */
+  }
+
+  /* 弹窗容器调整 */
+  .w-\[780px\] {
+    width: 100% !important;
+    max-width: 400px !important; /* 限制手机端最大宽度 */
+    height: auto !important;
+    min-height: auto !important;
+    max-height: 90vh !important; /* 留出上下边距 */
+    overflow-y: auto !important; /* 内容过多时滚动 */
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 20px !important;
+    background-color: #fdf7ef !important;
+  }
+  
+  /* 弹窗内部布局改为垂直 */
+  .w-\[780px\] .content-stretch.flex.items-start {
+    flex-direction: column !important;
+    height: auto !important;
+  }
+  
+  /* 左侧图片区域：移动端改为顶部 Banner，高度缩小 */
+  .w-\[780px\] .flex-\[1_0_0\].h-full:first-child {
+    flex: none !important;
+    height: 120px !important; /* 缩小高度 */
+    width: 100% !important;
+    min-height: 120px !important;
+  }
+  
+  /* 右侧内容区域 */
+  .w-\[780px\] .flex-\[1_0_0\].h-full:last-child {
+    flex: 1 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+  }
+
+  /* 内容内边距调整 */
+  .w-\[780px\] .p-\[32px\] {
+    padding: 24px 20px !important;
+    gap: 15px !important; /* 减小间距 */
+  }
+
+  /* 修复验证码/邀请码输入区域：禁止换行，强制横排 */
+  .w-\[780px\] .content-stretch.flex.gap-\[6px\] {
+    flex-direction: row !important; /* 强制水平排列 */
+    flex-wrap: nowrap !important; /* 禁止换行 */
+    gap: 6px !important; /* 保持适当间距 */
+    width: 100% !important;
+    justify-content: space-between !important; /* 均匀分布 */
+  }
+
+  /* 确保输入框有宽度，且不会被压缩 */
+  .w-\[780px\] input.text-\[24px\] {
+    height: 44px !important;
+    font-size: 20px !important;
+    border-radius: 10px !important;
+    min-width: 36px !important; /* 保证最小宽度 */
+    width: auto !important;
+    flex: 1 !important; /* 均分剩余空间 */
+    padding: 0 !important; /* 清除内边距干扰 */
+  }
+
+  /* 5. 交互组件优化 */
+  /* 增加点击区域 */
+  button, a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ==========================================================================
+   Small Mobile (< 480px)
+   针对小屏手机的极端情况处理
+   ========================================================================== */
+@media (max-width: 480px) {
+  /* HeroIcons 隐藏或缩小 (太占空间) */
+  .grid-cols-\[max-content\].inline-grid {
+    transform: scale(0.7);
+    margin-bottom: -20px;
+  }
+  
+  /* 搜索栏布局调整为垂直 */
+  form .flex.gap-\[15px\] {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  /* 搜索按钮全宽 */
+  form button.bg-\[\#925400\] {
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  /* 弹窗图片进一步压缩，腾出空间给键盘 */
+  .w-\[780px\] .flex-\[1_0_0\].h-full:first-child {
+    height: 100px !important;
+    min-height: 100px !important;
+  }
+}
+
+/* ==========================================================================
+   Landscape Mode (手机横屏)
+   ========================================================================== */
+@media (max-height: 500px) and (orientation: landscape) {
+  /* 隐藏弹窗顶部图片，最大化输入空间 */
+  .w-\[780px\] .flex-\[1_0_0\].h-full:first-child {
+    display: none !important;
+  }
+  
+  /* 弹窗高度填满 */
+  .w-\[780px\] {
+    height: 95vh !important;
+    max-height: none !important;
+  }
+  
+  .w-\[780px\] .p-\[32px\] {
+    padding: 15px !important;
+  }
+}

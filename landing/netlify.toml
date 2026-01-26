@@ -1,0 +1,7 @@
+[build]
+  command = "npm run build"
+  publish = "build"
+
+# 可选：设置 Node 版本（如需与 Netlify 环境一致）
+# [build.environment]
+#   NODE_VERSION = "22"

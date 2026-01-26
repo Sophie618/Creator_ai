@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from datetime import datetime
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -834,19 +835,43 @@ def delete_article(article_id: str):
     return {"status": "success", "message": "Article deleted"}
 
 # 挂载前端静态文件 (用于部署)
-# 只有当 dist 目录存在时才挂载，确保本地开发时不会报错
 frontend_dist = os.path.join(os.path.dirname(__file__), "../frontend/dist")
+landing_dist = os.path.join(os.path.dirname(__file__), "../landing/dist")
+
+# 1. 始终挂载主应用到 /app
 if os.path.exists(frontend_dist):
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
-    
-    # 捕获所有 404 并返回 index.html (React Router 支持)
-    @app.exception_handler(404)
-    async def custom_404_handler(request, __):
-        if not request.url.path.startswith("/api") and not request.url.path.startswith("/proxy-image"):
-            try:
-                with open(os.path.join(frontend_dist, "index.html"), "r", encoding="utf-8") as f:
-                    return Response(content=f.read(), media_type="text/html")
-            except Exception:
-                pass
+    app.mount("/app", StaticFiles(directory=frontend_dist, html=True), name="app")
+
+# 2. 挂载官网到 / (如果存在)，否则重定向到 /app
+if os.path.exists(landing_dist):
+    app.mount("/", StaticFiles(directory=landing_dist, html=True), name="landing")
+elif os.path.exists(frontend_dist):
+    @app.get("/")
+    async def root_redirect():
+        return RedirectResponse(url="/app/")
+
+# 捕获 404 并处理 SPA 路由
+@app.exception_handler(404)
+async def custom_404_handler(request, __):
+    path = request.url.path
+    if path.startswith("/api") or path.startswith("/proxy-image"):
         return Response(content="Not Found", status_code=404)
+    
+    # 如果请求路径以 /app 开头，返回主应用的 index.html
+    if path.startswith("/app") and os.path.exists(frontend_dist):
+        try:
+            with open(os.path.join(frontend_dist, "index.html"), "r", encoding="utf-8") as f:
+                return Response(content=f.read(), media_type="text/html")
+        except Exception:
+            pass
+            
+    # 其他路径返回官网的 index.html (如果存在)
+    if os.path.exists(landing_dist):
+        try:
+            with open(os.path.join(landing_dist, "index.html"), "r", encoding="utf-8") as f:
+                return Response(content=f.read(), media_type="text/html")
+        except Exception:
+            pass
+
+    return Response(content="Not Found", status_code=404)
 
