@@ -834,44 +834,60 @@ def delete_article(article_id: str):
         conn.commit()
     return {"status": "success", "message": "Article deleted"}
 
-# 挂载前端静态文件 (用于部署)
+
+# ==========================================
+# 静态资源与多域名路由 (Enterprise Architecture)
+# ==========================================
+
 frontend_dist = os.path.join(os.path.dirname(__file__), "../frontend/dist")
 landing_dist = os.path.join(os.path.dirname(__file__), "../landing/dist")
 
-# 1. 始终挂载主应用到 /app
-if os.path.exists(frontend_dist):
-    app.mount("/app", StaticFiles(directory=frontend_dist, html=True), name="app")
+# 1. 挂载静态资源 Assets (互不冲突)
+# 前端构建配置需设置 build.assetsDir = "assets-app"
+frontend_assets = os.path.join(frontend_dist, "assets-app")
+if os.path.exists(frontend_assets):
+    app.mount("/assets-app", StaticFiles(directory=frontend_assets), name="app_assets")
 
-# 2. 挂载官网到 / (如果存在)，否则重定向到 /app
-if os.path.exists(landing_dist):
-    app.mount("/", StaticFiles(directory=landing_dist, html=True), name="landing")
-elif os.path.exists(frontend_dist):
-    @app.get("/")
-    async def root_redirect():
-        return RedirectResponse(url="/app/")
+# 官网构建配置需设置 build.assetsDir = "assets-landing"
+landing_assets = os.path.join(landing_dist, "assets-landing")
+if os.path.exists(landing_assets):
+    app.mount("/assets-landing", StaticFiles(directory=landing_assets), name="landing_assets")
 
-# 捕获 404 并处理 SPA 路由
-@app.exception_handler(404)
-async def custom_404_handler(request, __):
+# 2. 智能路由 Middleware (基于域名分发)
+from starlette.requests import Request
+from starlette.responses import FileResponse
+
+@app.middleware("http")
+async def subdomain_router(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api") or path.startswith("/proxy-image"):
-        return Response(content="Not Found", status_code=404)
+    host = request.headers.get("host", "").split(":")[0]  # Remove port if present
     
-    # 如果请求路径以 /app 开头，返回主应用的 index.html
-    if path.startswith("/app") and os.path.exists(frontend_dist):
-        try:
-            with open(os.path.join(frontend_dist, "index.html"), "r", encoding="utf-8") as f:
-                return Response(content=f.read(), media_type="text/html")
-        except Exception:
-            pass
-            
-    # 其他路径返回官网的 index.html (如果存在)
-    if os.path.exists(landing_dist):
-        try:
-            with open(os.path.join(landing_dist, "index.html"), "r", encoding="utf-8") as f:
-                return Response(content=f.read(), media_type="text/html")
-        except Exception:
-            pass
+    # (A) APIPass-through: 这里的请求直接交给 FastAPI 路由处理
+    if path.startswith("/api") or path.startswith("/proxy-image") or path.startswith("/docs") or path.startswith("/openapi.json"):
+        return await call_next(request)
+        
+    # (B) Assets Passthrough: 静态资源已经在上方 mount，直接放行
+    if path.startswith("/assets-app") or path.startswith("/assets-landing"):
+        return await call_next(request)
 
-    return Response(content="Not Found", status_code=404)
+    # (C) 域名分发逻辑
+    # 规则: 访问 "app.collectorai.top" -> 服务 Frontend 应用
+    # 规则: 访问 "collectorai.top" 或其他 -> 服务 Landing 官网
+    
+    is_app_domain = host.startswith("app.")
+    target_dist = frontend_dist if is_app_domain else landing_dist
+    
+    # (D) 文件服务逻辑 (模拟 Nginx try_files)
+    # 1. 尝试直接寻找文件 (例如 favicon.ico, robots.txt)
+    file_path = os.path.join(target_dist, path.lstrip("/"))
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+        
+    # 2. 如果是 SPA (单页应用)，非 API 请求统一返回 index.html
+    index_path = os.path.join(target_dist, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+        
+    return Response("Not Found", status_code=404)
+
 

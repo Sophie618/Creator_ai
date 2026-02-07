@@ -72,7 +72,8 @@
     },
     build: {
       target: 'esnext',
-      outDir: 'build',
+      outDir: 'dist',
+      assetsDir: 'assets-landing'
     },
     server: {
       port: 3000,
